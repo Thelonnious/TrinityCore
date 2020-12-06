@@ -419,7 +419,7 @@ void ReadLiquidObjectTable()
 
 void ReadLiquidTypeTable()
 {
-    printf("Read LiquidType.dbc file...");
+    printf("Read LiquidType.dbc file...\n");
     HANDLE dbcFile;
     if (!SFileOpenFileEx(LocaleMpq, "DBFilesClient\\LiquidType.dbc", SFILE_OPEN_PATCHED_FILE, &dbcFile))
     {
