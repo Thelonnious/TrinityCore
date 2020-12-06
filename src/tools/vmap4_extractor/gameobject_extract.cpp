@@ -59,7 +59,7 @@ extern HANDLE LocaleMpq;
 
 void ExtractGameobjectModels()
 {
-    printf("Extracting GameObject models...");
+    printf("Extracting GameObject models...\n");
     DBCFile dbc(LocaleMpq, "DBFilesClient\\GameObjectDisplayInfo.dbc");
     if (!dbc.open())
     {
