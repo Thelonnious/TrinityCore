@@ -28,6 +28,7 @@
 #include "Common.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
+#include "GameClient.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "Guild.h"
@@ -136,7 +137,8 @@ WorldSession::WorldSession(uint32 id, std::string&& name, uint32 battlenetAccoun
     m_currentBankerGUID(),
     _timeSyncClockDeltaQueue(6),
     _timeSyncClockDelta(0),
-    _pendingTimeSyncRequests()
+    _pendingTimeSyncRequests(),
+    _gameClient(new GameClient(this))
 {
     memset(m_Tutorials, 0, sizeof(m_Tutorials));
 
@@ -173,6 +175,8 @@ WorldSession::~WorldSession()
 
     delete _warden;
     delete _RBACData;
+
+    delete _gameClient;
 
     ///- empty incoming packet queue
     WorldPacket* packet = nullptr;
@@ -1373,8 +1377,8 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint16 opcode) co
         case CMSG_EQUIPMENT_SET_DELETE:                 //   0               1.5
         case CMSG_DISMISS_CRITTER:                      //   0               1.5
         case CMSG_REPOP_REQUEST:                        //   0               1.5
-        case CMSG_GROUP_INVITE:                         //   0               1.5
-        case CMSG_GROUP_INVITE_RESPONSE:                //   0               1.5
+        case CMSG_PARTY_INVITE:                         //   0               1.5
+        case CMSG_PARTY_INVITE_RESPONSE:                //   0               1.5
         case CMSG_GROUP_UNINVITE_GUID:                  //   0               1.5
         case CMSG_GROUP_DISBAND:                        //   0               1.5
         case CMSG_BATTLEMASTER_JOIN_ARENA:              //   0               1.5
@@ -1495,6 +1499,7 @@ uint32 WorldSession::DosProtection::GetMaxPacketCounterAllowed(uint16 opcode) co
         case CMSG_REPORT_PVP_AFK:                       // not profiled
         case CMSG_GUILD_QUERY_MEMBERS_FOR_RECIPE:       // not profiled
         case CMSG_GUILD_QUERY_MEMBER_RECIPES:           // not profiled
+        case CMSG_SET_EVERYONE_IS_ASSISTANT:            // not profiled
         {
             maxPacketCounterAllowed = 10;
             break;
@@ -1587,4 +1592,28 @@ void WorldSession::SendTimeSync()
     // Schedule next sync in 5 sec (sniffs sometimes vary between 5 and 6 seconds. Probably due to their 400 batch interval)
     _timeSyncTimer = 5000;
     _timeSyncNextCounter++;
+}
+
+bool WorldSession::IsRightUnitBeingMoved(ObjectGuid guid)
+{
+    GameClient* client = GetGameClient();
+
+    // the client is attempting to tamper movement data
+    // edit: this wouldn't happen in retail but it does in TC, even with a legitimate client.
+    if (!client->GetActivelyMovedUnit() || client->GetActivelyMovedUnit()->GetGUID() != guid)
+    {
+        TC_LOG_DEBUG("entities.unit", "Attempt at tampering movement data by Player %s", _player->GetName().c_str());
+        return false;
+    }
+
+    // This can happen if a legitimate client has lost control of a unit but hasn't received SMSG_CONTROL_UPDATE before
+    // sending this packet yet. The server should silently ignore all MOVE messages coming from the client as soon
+    // as control over that unit is revoked (through a 'SMSG_CONTROL_UPDATE allowMove=false' message).
+    if (!client->IsAllowedToMove(guid))
+    {
+        TC_LOG_DEBUG("entities.unit", "Bad or outdated movement data by Player %s", _player->GetName().c_str());
+        return false;
+    }
+
+    return true;
 }

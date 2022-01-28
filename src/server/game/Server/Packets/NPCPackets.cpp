@@ -77,7 +77,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::NPC::VendorItem const& it
     data << int32(item.MuID);
     data << int32(item.Durability);
 
-    if (item.ExtendedCostID)
+    if (item.ExtendedCostID.has_value())
         data << uint32(*item.ExtendedCostID);
 
     data << uint32(item.ItemID);
@@ -85,7 +85,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::NPC::VendorItem const& it
     data << uint32(item.Price);
     data << uint32(item.ItemDisplayInfoID);
 
-    if (item.PlayerConditionFailed.is_initialized())
+    if (item.PlayerConditionFailed.has_value())
         data << int32(*item.PlayerConditionFailed);
 
     data << int32(item.Quantity);
@@ -107,8 +107,8 @@ WorldPacket const* WorldPackets::NPC::VendorInventory::Write()
 
     for (VendorItem const& item : Items)
     {
-        _worldPacket.WriteBit(!item.ExtendedCostID.is_initialized());
-        _worldPacket.WriteBit(!item.PlayerConditionFailed.is_initialized());
+        _worldPacket.WriteBit(!item.ExtendedCostID.has_value());
+        _worldPacket.WriteBit(!item.PlayerConditionFailed.has_value());
     }
 
     _worldPacket.WriteBit(Vendor[4]);

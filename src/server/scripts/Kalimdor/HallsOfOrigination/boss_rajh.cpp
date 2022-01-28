@@ -50,10 +50,10 @@ enum Spells
 
 enum Texts
 {
-    SAY_AGGRO               = 0,
-    SAY_BLESSING_OF_THE_SUN = 1,
-    SAY_SLAY                = 2,
-    SAY_DEATH               = 3
+    SAY_AGGRO                   = 0,
+    SAY_BLESSING_OF_THE_SUN     = 1,
+    SAY_SLAY                    = 2,
+    SAY_DEATH                   = 3
 };
 
 enum Events
@@ -83,35 +83,18 @@ enum Events
 
 enum MovePoints
 {
-    POINT_NONE,
+    POINT_NONE = 0,
     POINT_RAJH_CENTER
-};
-
-enum AchievementData
-{
-    DATA_SUN_OF_A = 1
 };
 
 Position const RajhMiddlePos = { -318.5936f, 192.8621f, 343.9443f };
 
 struct boss_rajh : public BossAI
 {
-    boss_rajh(Creature* creature) : BossAI(creature, DATA_RAJH)
-    {
-        Initialize();
-    }
+    boss_rajh(Creature* creature) : BossAI(creature, DATA_RAJH), _energized(true), _randomTimerCase(0) { }
 
-    void Initialize()
+    void JustAppeared() override
     {
-        _energized = true;
-        _achievementEnabled = true;
-        _randomTimerCase = 0;
-    }
-
-    void Reset() override
-    {
-        _Reset();
-        Initialize();
         me->MakeInterruptable(false);
     }
 
@@ -120,6 +103,7 @@ struct boss_rajh : public BossAI
         BossAI::JustEngagedWith(who);
         Talk(SAY_AGGRO);
         instance->SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, me);
+        instance->instance->SetWorldState(WORLD_STATE_ID_SUN_OF_A, 0);
         me->SetReactState(REACT_AGGRESSIVE);
         _randomTimerCase = RAND(0, 1);
         events.ScheduleEvent(EVENT_SOLAR_WINDS, 5s);
@@ -155,14 +139,6 @@ struct boss_rajh : public BossAI
             me->MakeInterruptable(false);
     }
 
-    uint32 GetData(uint32 type) const override
-    {
-        if (type == DATA_SUN_OF_A)
-            return _achievementEnabled;
-
-        return 0;
-    }
-
     void MovementInform(uint32 type, uint32 pointId) override
     {
         if (type != POINT_MOTION_TYPE)
@@ -193,7 +169,7 @@ struct boss_rajh : public BossAI
             events.CancelEvent(EVENT_SUMMON_SUN_ORB);
             events.CancelEvent(EVENT_SUN_STRIKE);
             events.CancelEvent(EVENT_INFERNO_LEAP);
-            events.ScheduleEvent(EVENT_MOVE_TO_MIDDLE, Seconds(2));
+            events.ScheduleEvent(EVENT_MOVE_TO_MIDDLE, 2s);
             _energized = false;
         }
 
@@ -249,7 +225,8 @@ struct boss_rajh : public BossAI
                     me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_STATE_READY_SPELL_OMNI);
                     break;
                 case EVENT_REENGAGE:
-                    _achievementEnabled = false;
+                    if (!instance->instance->GetWorldStateValue(WORLD_STATE_ID_SUN_OF_A))
+                        instance->instance->SetWorldState(WORLD_STATE_ID_SUN_OF_A, 1);
                     _energized = true;
                     _randomTimerCase = RAND(0, 1);
                     events.ScheduleEvent(EVENT_SOLAR_WINDS, 5s);
@@ -276,7 +253,6 @@ struct boss_rajh : public BossAI
     }
 private:
     bool _energized;
-    bool _achievementEnabled;
     uint8 _randomTimerCase;
 };
 
@@ -287,7 +263,7 @@ struct npc_rajh_solar_winds : public ScriptedAI
     void IsSummonedBy(Unit* /*summoner*/) override
     {
         me->SetWalk(true);
-        _events.ScheduleEvent(EVENT_GROW, Seconds(1));
+        _events.ScheduleEvent(EVENT_GROW, 1s);
     }
 
     void JustSummoned(Creature* summon) override
@@ -306,11 +282,11 @@ struct npc_rajh_solar_winds : public ScriptedAI
             {
                 case EVENT_GROW:
                     me->SetObjectScale(1.0f);
-                    _events.ScheduleEvent(EVENT_START_MOVING, Seconds(2));
+                    _events.ScheduleEvent(EVENT_START_MOVING, 2s);
                     break;
                 case EVENT_START_MOVING:
                     DoCastSelf(SPELL_SOLAR_WINDS_PERIODIC, true);
-                    _events.ScheduleEvent(EVENT_MOVE_ARROUND, 1);
+                    _events.ScheduleEvent(EVENT_MOVE_ARROUND, 1ms);
                     break;
                 case EVENT_MOVE_ARROUND:
                 {
@@ -319,7 +295,7 @@ struct npc_rajh_solar_winds : public ScriptedAI
                     pos.m_positionZ += 5.0f;
                     me->MovePositionToFirstCollision(pos, 60.0f, o);
                     me->GetMotionMaster()->MovePoint(POINT_NONE, pos, true);
-                    _events.Repeat(Seconds(7));
+                    _events.Repeat(7s);
                     break;
                 }
                 default:
@@ -338,7 +314,7 @@ struct npc_rajh_orb_of_the_sun : public ScriptedAI
 
     void IsSummonedBy(Unit* /*summoner*/) override
     {
-        _events.ScheduleEvent(EVENT_GROW, Seconds(1));
+        _events.ScheduleEvent(EVENT_GROW, 1s);
     }
 
     void SpellHitTarget(Unit* /*target*/, SpellInfo const* spell) override
@@ -357,11 +333,11 @@ struct npc_rajh_orb_of_the_sun : public ScriptedAI
             {
                 case EVENT_GROW:
                     me->SetObjectScale(1.0f);
-                    _events.ScheduleEvent(EVENT_SUMMON_BLAZING_INFERNO, Seconds(1));
+                    _events.ScheduleEvent(EVENT_SUMMON_BLAZING_INFERNO, 1s);
                     break;
                 case EVENT_SUMMON_BLAZING_INFERNO:
                     DoCastSelf(SPELL_SUMMON_METEOR);
-                    _events.ScheduleEvent(EVENT_RIDE_VEHICLE, Seconds(2));
+                    _events.ScheduleEvent(EVENT_RIDE_VEHICLE, 2s);
                     break;
                 case EVENT_RIDE_VEHICLE:
                     if (Creature* inferno = me->FindNearestCreature(NPC_BLAZING_INFERNO, 200.0f, true))
@@ -420,23 +396,6 @@ class spell_rajh_summon_sun_orb_power_cost : public AuraScript
     }
 };
 
-class achievement_sun_of_a : public AchievementCriteriaScript
-{
-    public:
-        achievement_sun_of_a() : AchievementCriteriaScript("achievement_sun_of_a") { }
-
-        bool OnCheck(Player* /*source*/, Unit* target)
-        {
-            if (!target)
-                return false;
-
-            if (target->GetMap()->IsHeroic())
-                return target->GetAI()->GetData(DATA_SUN_OF_A);
-
-            return false;
-        }
-};
-
 void AddSC_boss_rajh()
 {
     RegisterHallsOfOriginationCreatureAI(boss_rajh);
@@ -445,5 +404,4 @@ void AddSC_boss_rajh()
     RegisterSpellScript(spell_rajh_summon_meteor);
     RegisterSpellScript(spell_rajh_summon_sun_orb);
     RegisterSpellScript(spell_rajh_summon_sun_orb_power_cost);
-    new achievement_sun_of_a();
 }

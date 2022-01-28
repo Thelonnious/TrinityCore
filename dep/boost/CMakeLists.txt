@@ -13,8 +13,7 @@ if(WIN32)
   if(DEFINED ENV{BOOST_ROOT})
     set(BOOST_ROOT $ENV{BOOST_ROOT})
     list(APPEND BOOST_LIBRARYDIR
-      ${BOOST_ROOT}/lib${PLATFORM}-msvc-14.2
-      ${BOOST_ROOT}/lib${PLATFORM}-msvc-14.1 )
+      ${BOOST_ROOT}/lib${PLATFORM}-msvc-14.2 )
   elseif(NOT DEFINED Boost_DIR AND NOT DEFINED BOOST_ROOT AND NOT DEFINED BOOSTROOT)
     message(FATAL_ERROR "No BOOST_ROOT environment variable could be found! Please make sure it is set and the points to your Boost installation.")
   endif()
@@ -78,9 +77,6 @@ target_compile_definitions(boost
     -DBOOST_DATE_TIME_NO_LIB
     -DBOOST_REGEX_NO_LIB
     -DBOOST_CHRONO_NO_LIB
-	# Due to MSVC linking error boost::none" already defined in scripts_...
-    # May be removed when the requirement is raised to boost 1.61 on windows.
-    -DBOOST_OPTIONAL_USE_OLD_DEFINITION_OF_NONE
     -DBOOST_SERIALIZATION_NO_LIB
     -DBOOST_CONFIG_SUPPRESS_OUTDATED_MESSAGE
     -DBOOST_ASIO_NO_DEPRECATED

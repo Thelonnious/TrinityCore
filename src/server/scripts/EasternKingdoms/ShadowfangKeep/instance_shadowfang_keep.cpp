@@ -123,7 +123,7 @@ public:
 
         void OnPlayerEnter(Player* player) override
         {
-            if (!_teamInInstance.is_initialized())
+            if (!_teamInInstance.has_value())
             {
                 _teamInInstance = player->GetTeam();
 
@@ -165,7 +165,7 @@ public:
                     break;
                 case NPC_PISTOL_BARRAGE_DUMMY:
                     if (Creature* godfrey = GetCreature(DATA_LORD_GODFREY))
-                        if (godfrey->IsAIEnabled)
+                        if (godfrey->IsAIEnabled())
                             godfrey->AI()->JustSummoned(creature);
                     break;
                 default:

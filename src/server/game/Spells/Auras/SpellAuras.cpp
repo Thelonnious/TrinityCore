@@ -175,9 +175,6 @@ void AuraApplication::_HandleEffect(uint8 effIndex, bool apply)
         ASSERT(_flags & (1<<effIndex));
         _flags &= ~(1<<effIndex);
         aurEff->HandleEffect(this, AURA_EFFECT_HANDLE_REAL, false);
-
-        // Remove all triggered by aura spells vs unlimited duration
-        aurEff->CleanupTriggeredSpells(GetTarget());
     }
     SetNeedClientUpdate();
 }
@@ -755,7 +752,7 @@ void Aura::RefreshDuration(bool withMods)
     {
         int32 duration = m_spellInfo->GetMaxDuration();
         // Calculate duration of periodics affected by haste.
-        if (caster->HasAuraTypeWithAffectMask(SPELL_AURA_PERIODIC_HASTE, m_spellInfo) || m_spellInfo->HasAttribute(SPELL_ATTR5_HASTE_AFFECT_DURATION))
+        if (caster->HasAuraTypeWithAffectMask(SPELL_AURA_PERIODIC_HASTE, m_spellInfo) || m_spellInfo->HasAttribute(SPELL_ATTR5_SPELL_HASTE_AFFECTS_PERIODIC))
             duration = int32(duration * caster->GetFloatValue(UNIT_MOD_CAST_SPEED));
 
         SetMaxDuration(duration);
@@ -772,7 +769,7 @@ void Aura::RefreshTimers()
 {
     m_maxDuration = CalcMaxDuration();
 
-    bool resetPeriodicTimer = !m_spellInfo->HasAttribute(SPELL_ATTR8_DONT_RESET_PERIODIC_TIMER);
+    bool resetPeriodicTimer = !m_spellInfo->IsRollingDurationOver();
     if (!resetPeriodicTimer)
     {
         int32 minAmplitude = m_maxDuration;
@@ -905,7 +902,7 @@ bool Aura::ModStackAmount(int32 num, AuraRemoveFlags removeMode /*= AuraRemoveFl
 
     EnumFlag<AuraRemoveFlags> removeFlags = removeMode;
 
-    bool refresh = stackAmount >= GetStackAmount();
+    bool refresh = stackAmount >= GetStackAmount() && (m_spellInfo->StackAmount || !m_spellInfo->HasAttribute(SPELL_ATTR1_DONT_REFRESH_DURATION_ON_RECAST));
 
     // Update stack amount
     SetStackAmount(stackAmount);
@@ -1129,6 +1126,21 @@ bool Aura::HasEffectType(AuraType type) const
         if (HasEffect(i) && m_effects[i]->GetAuraType() == type)
             return true;
     }
+    return false;
+}
+
+bool Aura::EffectTypeNeedsSendingAmount(AuraType type)
+{
+    switch (type)
+    {
+        case SPELL_AURA_OVERRIDE_ACTIONBAR_SPELLS:
+        case SPELL_AURA_OVERRIDE_ACTIONBAR_SPELLS_TRIGGERED:
+        case SPELL_AURA_MOD_SPELL_CATEGORY_COOLDOWN:
+            return true;
+        default:
+            break;
+    }
+
     return false;
 }
 
@@ -1693,15 +1705,15 @@ void Aura::PrepareProcToTrigger(AuraApplication* aurApp, ProcEventInfo& eventInf
     if (!prepare)
         return;
 
+    SpellProcEntry const* procEntry = sSpellMgr->GetSpellProcEntry(GetId());
+    ASSERT(procEntry);
+
     // take one charge, aura expiration will be handled in Aura::TriggerProcOnEvent (if needed)
-    if (IsUsingCharges() && (!eventInfo.GetSpellInfo() || !eventInfo.GetSpellInfo()->HasAttribute(SPELL_ATTR6_DONT_CONSUME_PROC_CHARGES)))
+    if (!(procEntry->AttributesMask & PROC_ATTR_USE_STACKS_FOR_CHARGES)&& IsUsingCharges() && (!eventInfo.GetSpellInfo() || !eventInfo.GetSpellInfo()->HasAttribute(SPELL_ATTR6_DONT_CONSUME_PROC_CHARGES)))
     {
         --m_procCharges;
         SetNeedClientUpdateForTargets();
     }
-
-    SpellProcEntry const* procEntry = sSpellMgr->GetSpellProcEntry(GetId());
-    ASSERT(procEntry);
 
     // cooldowns should be added to the whole aura (see 51698 area aura)
     AddProcCooldown(now + procEntry->Cooldown);
@@ -1873,8 +1885,15 @@ void Aura::TriggerProcOnEvent(uint8 procEffectMask, AuraApplication* aurApp, Pro
     }
 
     // Remove aura if we've used last charge to proc
-    if (IsUsingCharges() && !GetCharges())
-        Remove();
+    if (ASSERT_NOTNULL(sSpellMgr->GetSpellProcEntry(GetId()))->AttributesMask & PROC_ATTR_USE_STACKS_FOR_CHARGES)
+    {
+        ModStackAmount(-1);
+    }
+    else if (IsUsingCharges())
+    {
+        if (!GetCharges())
+            Remove();
+    }
 }
 
 void Aura::_DeleteRemovedApplications()
@@ -2420,7 +2439,7 @@ void DynObjAura::FillTargetMap(std::unordered_map<Unit*, uint8>& targets, Unit* 
         if (GetSpellInfo()->Effects[effIndex].TargetB.GetTarget() == TARGET_DEST_DYNOBJ_ALLY
             || GetSpellInfo()->Effects[effIndex].TargetB.GetTarget() == TARGET_UNIT_DEST_AREA_ALLY)
         {
-            Trinity::AnyFriendlyUnitInObjectRangeCheck u_check(GetDynobjOwner(), dynObjOwnerCaster, radius, m_spellInfo->HasAttribute(SPELL_ATTR3_ONLY_TARGET_PLAYERS));
+            Trinity::AnyFriendlyUnitInObjectRangeCheck u_check(GetDynobjOwner(), dynObjOwnerCaster, radius, m_spellInfo->HasAttribute(SPELL_ATTR3_ONLY_TARGET_PLAYERS), m_spellInfo->HasAttribute(SPELL_ATTR5_DONT_TARGET_PLAYERS));
             Trinity::UnitListSearcher<Trinity::AnyFriendlyUnitInObjectRangeCheck> searcher(GetDynobjOwner(), units, u_check);
             Cell::VisitAllObjects(GetDynobjOwner(), searcher, radius);
         }

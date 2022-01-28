@@ -24,8 +24,8 @@
 
 WorldPacket const* WorldPackets::Movement::TransferPending::Write()
 {
-    _worldPacket.WriteBit(TransferSpellID.is_initialized());
-    _worldPacket.WriteBit(Ship.is_initialized());
+    _worldPacket.WriteBit(TransferSpellID.has_value());
+    _worldPacket.WriteBit(Ship.has_value());
     if (Ship)
     {
         _worldPacket << int32(Ship->OriginMapID);
@@ -137,19 +137,19 @@ WorldPacket const* WorldPackets::Movement::MoveTeleport::Write()
     _worldPacket.WriteBit(MoverGUID[3]);
     _worldPacket.WriteBit(MoverGUID[2]);
 
-    _worldPacket.WriteBit(Vehicle.is_initialized());
+    _worldPacket.WriteBit(Vehicle.has_value());
     if (Vehicle)
     {
         _worldPacket.WriteBit(Vehicle->VehicleExitVoluntary);
         _worldPacket.WriteBit(Vehicle->VehicleExitTeleport);
     }
 
-    _worldPacket.WriteBit(TransportGUID.is_initialized());
+    _worldPacket.WriteBit(TransportGUID.has_value());
     _worldPacket.WriteBit(MoverGUID[1]);
 
-    if (TransportGUID.is_initialized())
+    if (TransportGUID.has_value())
     {
-        ObjectGuid transGUID = TransportGUID.get();
+        ObjectGuid transGUID = TransportGUID.value();
         _worldPacket.WriteBit(transGUID[1]);
         _worldPacket.WriteBit(transGUID[3]);
         _worldPacket.WriteBit(transGUID[2]);
@@ -166,9 +166,9 @@ WorldPacket const* WorldPackets::Movement::MoveTeleport::Write()
 
     _worldPacket.FlushBits();
 
-    if (TransportGUID.is_initialized())
+    if (TransportGUID.has_value())
     {
-        ObjectGuid transGUID = TransportGUID.get();
+        ObjectGuid transGUID = TransportGUID.value();
         _worldPacket.WriteByteSeq(transGUID[5]);
         _worldPacket.WriteByteSeq(transGUID[6]);
         _worldPacket.WriteByteSeq(transGUID[1]);
@@ -399,7 +399,7 @@ void WorldPackets::Movement::MonsterMove::InitializeSplineData(::Movement::MoveS
 
     if (splineFlags.animation)
     {
-        movementSpline.Animation = boost::in_place();
+        movementSpline.Animation.emplace();
         movementSpline.Animation->AnimTier = splineFlags.animTier;
         movementSpline.Animation->TierTransStartTime = moveSpline.effect_start_time;
     }
@@ -408,7 +408,7 @@ void WorldPackets::Movement::MonsterMove::InitializeSplineData(::Movement::MoveS
 
     if (splineFlags.parabolic)
     {
-        movementSpline.JumpExtraData = boost::in_place();
+        movementSpline.JumpExtraData.emplace();
         movementSpline.JumpExtraData->JumpGravity = moveSpline.vertical_acceleration;
         movementSpline.JumpExtraData->StartTime = moveSpline.effect_start_time;
     }
@@ -483,6 +483,15 @@ WorldPacket const* WorldPackets::Movement::FlightSplineSync::Write()
     return &_worldPacket;
 }
 
+WorldPacket const* WorldPackets::Movement::TransferAborted::Write()
+{
+    _worldPacket << uint32(MapID);
+    _worldPacket << uint8(TransfertAbort);
+    _worldPacket << uint8(Arg);
+
+    return &_worldPacket;
+}
+
 ByteBuffer& WorldPackets::operator<<(ByteBuffer& data, Movement::MovementSpline const& movementSpline)
 {
     data << int8(movementSpline.Face);
@@ -529,4 +538,27 @@ ByteBuffer& WorldPackets::operator<<(ByteBuffer& data, Movement::MovementMonster
     data << movementMonsterSpline.Move;
 
     return data;
+}
+
+WorldPacket const* WorldPackets::Movement::MoveSetActiveMover::Write()
+{
+    _worldPacket.WriteBit(MoverGUID[5]);
+    _worldPacket.WriteBit(MoverGUID[7]);
+    _worldPacket.WriteBit(MoverGUID[3]);
+    _worldPacket.WriteBit(MoverGUID[6]);
+    _worldPacket.WriteBit(MoverGUID[0]);
+    _worldPacket.WriteBit(MoverGUID[4]);
+    _worldPacket.WriteBit(MoverGUID[1]);
+    _worldPacket.WriteBit(MoverGUID[2]);
+
+    _worldPacket.WriteByteSeq(MoverGUID[6]);
+    _worldPacket.WriteByteSeq(MoverGUID[2]);
+    _worldPacket.WriteByteSeq(MoverGUID[3]);
+    _worldPacket.WriteByteSeq(MoverGUID[0]);
+    _worldPacket.WriteByteSeq(MoverGUID[5]);
+    _worldPacket.WriteByteSeq(MoverGUID[7]);
+    _worldPacket.WriteByteSeq(MoverGUID[1]);
+    _worldPacket.WriteByteSeq(MoverGUID[4]);
+
+    return &_worldPacket;
 }

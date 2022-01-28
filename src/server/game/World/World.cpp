@@ -88,6 +88,7 @@
 #include "WeatherMgr.h"
 #include "WhoListStorage.h"
 #include "WorldSession.h"
+#include "WorldStateMgr.h"
 #include "WorldSocket.h"
 
 #include <boost/asio/ip/address.hpp>
@@ -750,7 +751,7 @@ void World::LoadConfigSettings(bool reload)
     if (reload)
         sMapMgr->SetGridCleanUpDelay(m_int_configs[CONFIG_INTERVAL_GRIDCLEAN]);
 
-    m_int_configs[CONFIG_INTERVAL_MAPUPDATE] = sConfigMgr->GetIntDefault("MapUpdateInterval", 100);
+    m_int_configs[CONFIG_INTERVAL_MAPUPDATE] = sConfigMgr->GetIntDefault("MapUpdateInterval", 10);
     if (m_int_configs[CONFIG_INTERVAL_MAPUPDATE] < MIN_MAP_UPDATE_DELAY)
     {
         TC_LOG_ERROR("server.loading", "MapUpdateInterval (%i) must be greater %u. Use this minimal value.", m_int_configs[CONFIG_INTERVAL_MAPUPDATE], MIN_MAP_UPDATE_DELAY);
@@ -1463,7 +1464,6 @@ void World::LoadConfigSettings(bool reload)
     m_bool_configs[CONFIG_RESET_DUEL_HEALTH_MANA] = sConfigMgr->GetBoolDefault("ResetDuelHealthMana", false);
     m_bool_configs[CONFIG_START_ALL_EXPLORED] = sConfigMgr->GetBoolDefault("PlayerStart.MapsExplored", false);
     m_bool_configs[CONFIG_START_ALL_REP] = sConfigMgr->GetBoolDefault("PlayerStart.AllReputation", false);
-    m_bool_configs[CONFIG_ALWAYS_MAXSKILL] = sConfigMgr->GetBoolDefault("AlwaysMaxWeaponSkill", false);
     m_bool_configs[CONFIG_PVP_TOKEN_ENABLE] = sConfigMgr->GetBoolDefault("PvPToken.Enable", false);
     m_int_configs[CONFIG_PVP_TOKEN_MAP_TYPE] = sConfigMgr->GetIntDefault("PvPToken.MapAllowType", 4);
     m_int_configs[CONFIG_PVP_TOKEN_ID] = sConfigMgr->GetIntDefault("PvPToken.ItemID", 29434);
@@ -1609,6 +1609,9 @@ void World::LoadConfigSettings(bool reload)
 
     // Allow to cache data queries
     m_bool_configs[CONFIG_CACHE_DATA_QUERIES] = sConfigMgr->GetBoolDefault("CacheDataQueries", true);
+
+    // Anti movement cheat measure. Time each client have to acknowledge a movement change until they are kicked
+    m_int_configs[CONFIG_PENDING_MOVE_CHANGES_TIMEOUT] = sConfigMgr->GetIntDefault("AntiCheat.PendingMoveChangesTimeoutTime", 0);
 
     // call ScriptMgr if we're reloading the configuration
     if (reload)
@@ -1892,6 +1895,9 @@ void World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Creature Movement Overrides...");
     sObjectMgr->LoadCreatureMovementOverrides();                 // must be after LoadCreatures()
 
+    TC_LOG_INFO("server.loading", "Loading Creature Movement Info...");
+    sObjectMgr->LoadCreatureMovementInfo();                      // must be after LoadCreatureTemplates()
+
     TC_LOG_INFO("server.loading", "Loading Gameobject Data...");
     sObjectMgr->LoadGameObjects();
 
@@ -1990,9 +1996,6 @@ void World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Spell target coordinates...");
     sSpellMgr->LoadSpellTargetPositions();
-
-    TC_LOG_INFO("server.loading", "Loading enchant custom attributes...");
-    sSpellMgr->LoadEnchantCustomAttr();
 
     TC_LOG_INFO("server.loading", "Loading linked spells...");
     sSpellMgr->LoadSpellLinked();
@@ -2108,6 +2111,9 @@ void World::SetInitialWorldSettings()
     TC_LOG_INFO("server.loading", "Loading Waypoints...");
     sWaypointMgr->Load();
 
+    TC_LOG_INFO("server.loading", "Loading Waypoint Addons...");
+    sWaypointMgr->LoadWaypointAddons();
+
     TC_LOG_INFO("server.loading", "Loading SmartAI Waypoints...");
     sSmartWaypointMgr->LoadFromDB();
 
@@ -2116,6 +2122,9 @@ void World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading World States...");              // must be loaded before battleground, outdoor PvP and conditions
     LoadWorldStates();
+
+    TC_LOG_INFO("server.loading", "Loading Map default and Realm wide World States...");
+    sWorldStateMgr->LoadFromDB();
 
     sObjectMgr->LoadPhases();
 
@@ -2185,6 +2194,9 @@ void World::SetInitialWorldSettings()
 
     TC_LOG_INFO("server.loading", "Loading Calendar data...");
     sCalendarMgr->LoadFromDB();
+
+    TC_LOG_INFO("server.loading", "Loading Summon Properties parameter data...");
+    sObjectMgr->LoadSummonPropertiesParameters();
 
     TC_LOG_INFO("server.loading", "Loading Item loot...");
     sLootItemStorage->LoadStorageFromDB();
@@ -2391,7 +2403,7 @@ void World::Update(uint32 diff)
         ResetRandomBG();
 
     if (currentGameTime  > m_NextGuildReset)
-        ResetGuildCap();
+        PerformDailyGuildActions();
 
     if (currentGameTime  > m_NextCurrencyReset)
         ResetCurrencyWeekCap();
@@ -3507,7 +3519,7 @@ void World::ResetRandomBG()
     sWorld->setWorldState(WS_BG_DAILY_RESET_TIME, uint64(m_NextRandomBGReset));
 }
 
-void World::ResetGuildCap()
+void World::PerformDailyGuildActions()
 {
     m_NextGuildReset = time_t(m_NextGuildReset + DAY);
     sWorld->setWorldState(WS_GUILD_DAILY_RESET_TIME, uint64(m_NextGuildReset));
@@ -3517,6 +3529,8 @@ void World::ResetGuildCap()
     TC_LOG_INFO("misc", "Guild Daily Cap reset. Week: %u", week == 1);
     sWorld->setWorldState(WS_GUILD_WEEKLY_RESET_TIME, week);
     sGuildMgr->ResetTimes(week == 1);
+
+    sGuildMgr->ClearExpiredGuildNews();
 }
 
 void World::UpdateMaxSessionCounters()

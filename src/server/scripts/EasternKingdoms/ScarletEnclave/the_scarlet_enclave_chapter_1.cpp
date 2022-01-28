@@ -393,9 +393,10 @@ struct npc_eye_of_acherus : public ScriptedAI
         _events.ScheduleEvent(EVENT_ANNOUNCE_LAUNCH_TO_DESTINATION, 7s);
     }
 
-    void OnCharmed(bool apply) override
+    void OnCharmed(bool /*isNew*/)  override
     {
-        if (!apply)
+        bool const charmed = me->IsCharmed();
+        if (!charmed)
         {
             me->GetCharmerOrOwner()->RemoveAurasDueToSpell(SPELL_THE_EYE_OF_ACHERUS);
             me->GetCharmerOrOwner()->RemoveAurasDueToSpell(SPELL_EYE_OF_ACHERUS_FLIGHT_BOOST);
@@ -533,7 +534,7 @@ public:
 
             me->RestoreFaction();
             CombatAI::Reset();
-            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNK_15);
+            me->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SWIMMING);
         }
 
         void SpellHit(Unit* pCaster, SpellInfo const* pSpell) override
@@ -628,7 +629,7 @@ public:
                 }
 
                 me->SetImmuneToPC(false);
-                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_UNK_15);
+                me->RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_SWIMMING);
 
                 player->CastSpell(me, SPELL_DUEL, false);
                 player->CastSpell(player, SPELL_DUEL_FLAG, true);

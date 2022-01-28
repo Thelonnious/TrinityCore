@@ -53,6 +53,7 @@ typedef std::list<VendorItemCount> VendorItemCounts;
 #define CREATURE_Z_ATTACK_RANGE 3
 
 #define MAX_VENDOR_ITEMS 150                                // Limitation in 4.x.x item count in SMSG_VENDOR_INVENTORY
+static constexpr uint8 VENDOR_INVENTORY_REASON_INVENTORY_EMPTY = 1;
 
 //used for handling non-repeatable random texts
 typedef std::vector<uint8> CreatureTextRepeatIds;
@@ -62,7 +63,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 {
     public:
         explicit Creature(bool isWorldObject = false);
-        virtual ~Creature();
 
         void AddToWorld() override;
         void RemoveFromWorld() override;
@@ -95,11 +95,13 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         CreatureMovementData const& GetMovementTemplate() const;
         bool CanWalk() const { return GetMovementTemplate().IsGroundAllowed(); }
-        bool CanSwim() const override { return GetMovementTemplate().IsSwimAllowed() || IsPet(); }
+        bool CanSwim() const override;
+        bool CanEnterWater() const override;
         bool CanFly()  const override { return GetMovementTemplate().IsFlightAllowed() || IsFlying(); }
-        bool CanHover() const { return GetMovementTemplate().Ground == CreatureGroundMovementType::Hover || IsHovering(); }
+        bool CanHover() const { return GetMovementTemplate().IsHoverEnabled() || IsHovering(); }
         bool SetDisableGravity(bool disable, bool packetOnly = false, bool updateAnimationTier = true) override;
         bool SetHover(bool enable, bool packetOnly = false, bool updateAnimationTier = true) override;
+        bool SetCanFly(bool enable, bool packetOnly = false) override;
 
         bool IsDungeonBoss() const { return (GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_DUNGEON_BOSS) != 0; }
         bool IsAffectedByDiminishingReturns() const override { return Unit::IsAffectedByDiminishingReturns() || (GetCreatureTemplate()->flags_extra & CREATURE_FLAG_EXTRA_ALL_DIMINISH) != 0; }
@@ -127,7 +129,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool IsClassTrainerOf(Player const* player) const;
         bool CanCreatureAttack(Unit const* victim, bool force = true) const;
         void LoadTemplateImmunities();
-        bool IsImmunedToSpell(SpellInfo const* spellInfo, Unit* caster, Optional<uint8> effectMask = nullptr) const override;
+        bool IsImmunedToSpell(SpellInfo const* spellInfo, Unit* caster, Optional<uint8> effectMask = {}) const override;
         bool IsImmunedToSpellEffect(SpellInfo const* spellInfo, uint32 index, Unit* caster) const override;
         bool isElite() const;
         bool isWorldBoss() const;
@@ -139,11 +141,10 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         bool AIM_Destroy();
         bool AIM_Create(CreatureAI* ai = nullptr);
-        void AI_InitializeAndEnable();
         bool AIM_Initialize(CreatureAI* ai = nullptr);
         void Motion_Initialize();
 
-        CreatureAI* AI() const { return reinterpret_cast<CreatureAI*>(i_AI); }
+        CreatureAI* AI() const { return reinterpret_cast<CreatureAI*>(GetAI()); }
 
         SpellSchoolMask GetMeleeDamageSchoolMask() const override { return m_meleeDamageSchoolMask; }
         void SetMeleeDamageSchool(SpellSchools school) { m_meleeDamageSchoolMask = SpellSchoolMask(1 << school); }
@@ -152,7 +153,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
 
         bool UpdateEntry(uint32 entry, CreatureData const* data = nullptr, bool updateLevel = true);
 
-        void UpdateMovementFlags();
+        void UpdateMovementFlags(bool initializeDBStates);
 
         bool UpdateStats(Stats stat) override;
         bool UpdateAllStats() override;
@@ -162,7 +163,7 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         void UpdateMaxPower(Powers power) override;
         uint32 GetPowerIndex(Powers power) const override;
         void UpdateAttackPowerAndDamage(bool ranged = false) override;
-        void CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bool addTotalPct, float& minDamage, float& maxDamage) override;
+        void CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, bool addTotalPct, float& minDamage, float& maxDamage) const override;
         void UpdatePowerRegeneration(Powers powerType) override;
 
         void SetCanDualWield(bool value) override;
@@ -179,8 +180,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         CreatureTemplate const* GetCreatureTemplate() const { return m_creatureInfo; }
         CreatureData const* GetCreatureData() const { return m_creatureData; }
         CreatureAddon const* GetCreatureAddon() const;
-
-        float GetSparringHealthLimit() const;
 
         std::string const& GetAIName() const;
         std::string GetScriptName() const;
@@ -345,10 +344,10 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         // Handling caster facing during spellcast
         void SetTarget(ObjectGuid guid) override;
         void ReacquireSpellFocusTarget();
-        void DoNotReacquireSpellFocusTarget();
         void SetSpellFocus(Spell const* focusSpell, WorldObject const* target);
         bool HasSpellFocus(Spell const* focusSpell = nullptr) const override;
         void ReleaseSpellFocus(Spell const* focusSpell = nullptr, bool withDelay = true);
+        void ResetSpellFocusInfo() { _spellFocusInfo.Reset(); }
 
         bool IsMovementPreventedByCasting() const override;
 
@@ -358,13 +357,25 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool IsEscorted() const;
 
         bool CanGiveExperience() const;
-        bool IsAllowedToRepostionAgainst(Unit* target) const;
 
         void MakeInterruptable(bool apply);
 
         bool IsEngaged() const override;
         void AtEngage(Unit* target) override;
         void AtDisengage() override;
+
+        bool HasSwimmingFlagOutOfCombat() const
+        {
+            return !_isMissingSwimmingFlagOutOfCombat;
+        }
+        void RefreshSwimmingFlag(bool recheck = false);
+
+        CreatureMovementInfo const& GetCreatureMovementInfo() const { return _creatureMovementInfo; }
+
+        // Sets the the max health percentage threshold at which uncontrolled/unowned creatures can no longer deal damage to the creature
+        void SetNoNpcDamageBelowPctHealthValue(float value) { _noNpcDamageBelowPctHealth = std::clamp<float>(value, 0.f, 100.f); }
+        void ResetNoNpcDamageBelowPctHealthValue() { _noNpcDamageBelowPctHealth = 0.f; }
+        float GetNoNpcDamageBelowPctHealthValue() const { return _noNpcDamageBelowPctHealth; }
 
     protected:
         bool CreateFromProto(ObjectGuid::LowType guidlow, uint32 entry, CreatureData const* data = nullptr, uint32 vehId = 0);
@@ -402,7 +413,6 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool m_regenHealth;
         bool m_cannotReachTarget;
         uint32 m_cannotReachTimer;
-        bool m_AI_locked;
 
         SpellSchoolMask m_meleeDamageSchoolMask;
         uint32 m_originalEntry;
@@ -420,6 +430,12 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool IsInvisibleDueToDespawn() const override;
         bool CanAlwaysSee(WorldObject const* obj) const override;
 
+        // Initializes run and walk speed override data based on movementId override values stored in `creature_movement_info` table
+        void InitializeCreatureMovementInfo(uint32 movementId);
+
+        // Initializes move speed fields based on template and override data
+        void InitializeMovementSpeeds();
+
     private:
         void ForcedDespawn(uint32 timeMSToDespawn = 0, Seconds forceRespawnTimer = 0s);
         bool CheckNoGrayAggroConfig(uint32 playerLevel, uint32 creatureLevel) const; // No aggro from gray creatures
@@ -436,16 +452,16 @@ class TC_GAME_API Creature : public Unit, public GridObject<Creature>, public Ma
         bool m_triggerJustAppeared;
         bool m_respawnCompatibilityMode;
 
-        /* Spell focus system */
-        struct
-        {
-            Spell const* spell = nullptr;
-            uint32 delay = 0;         // ms until the creature's target should snap back (0 = no snapback scheduled)
-            ObjectGuid target;        // the creature's "real" target while casting
-            float orientation = 0.0f; // the creature's "real" orientation while casting
-        } _spellFocusInfo;
+        // Spell Focusing
+        CreatureSpellFocusData _spellFocusInfo;
 
         CreatureTextRepeatGroup m_textRepeat;
+
+        bool _isMissingSwimmingFlagOutOfCombat;
+
+        CreatureMovementInfo _creatureMovementInfo;
+
+        float _noNpcDamageBelowPctHealth;
 };
 
 class TC_GAME_API AssistDelayEvent : public BasicEvent

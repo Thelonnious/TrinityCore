@@ -33,6 +33,9 @@
 #include "WorldPacket.h"
 #include <algorithm>
 
+#include "Hacks/boost_1_74_fibonacci_heap.h"
+BOOST_1_74_FIBONACCI_HEAP_MSVC_COMPILE_FIX(ThreatManager::threat_list_heap::value_type)
+
 const CompareThreatLessThan ThreatManager::CompareThreat;
 
 void ThreatReference::AddThreat(float amount)
@@ -305,7 +308,7 @@ void ThreatManager::AddThreat(Unit* target, float amount, SpellInfo const* spell
     {
         if (spell->HasAttribute(SPELL_ATTR1_NO_THREAT))
             return;
-        if (!_owner->IsEngaged() && spell->HasAttribute(SPELL_ATTR3_NO_INITIAL_AGGRO))
+        if (!_owner->IsEngaged() && spell->HasAttribute(SPELL_ATTR2_NO_INITIAL_THREAT))
             return;
     }
 

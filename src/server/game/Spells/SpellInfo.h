@@ -23,6 +23,7 @@
 #include "DBCStructure.h"
 #include "Object.h"
 #include "SpellAuraDefines.h"
+#include "SpellDefines.h"
 
 #include <boost/container/flat_set.hpp>
 
@@ -81,7 +82,8 @@ enum SpellTargetSelectionCategories
     TARGET_SELECT_CATEGORY_CHANNEL,
     TARGET_SELECT_CATEGORY_NEARBY,
     TARGET_SELECT_CATEGORY_CONE,
-    TARGET_SELECT_CATEGORY_AREA
+    TARGET_SELECT_CATEGORY_AREA,
+    TARGET_SELECT_CATEGORY_TRAJ
 };
 
 enum SpellTargetReferenceTypes
@@ -184,6 +186,7 @@ enum SpellCustomAttributes
     SPELL_ATTR0_CU_CONE_LINE                     = 0x00000004,
     SPELL_ATTR0_CU_SHARE_DAMAGE                  = 0x00000008,
     SPELL_ATTR0_CU_NO_INITIAL_THREAT             = 0x00000010,
+    SPELL_ATTR0_CU_AURA_CC                       = 0x00000020,
     SPELL_ATTR0_CU_DONT_BREAK_STEALTH            = 0x00000040,
     SPELL_ATTR0_CU_DIRECT_DAMAGE                 = 0x00000100,
     SPELL_ATTR0_CU_CHARGE                        = 0x00000200,
@@ -195,7 +198,11 @@ enum SpellCustomAttributes
     SPELL_ATTR0_CU_REQ_TARGET_FACING_CASTER      = 0x00010000,
     SPELL_ATTR0_CU_REQ_CASTER_BEHIND_TARGET      = 0x00020000,
     SPELL_ATTR0_CU_ALLOW_INFLIGHT_TARGET         = 0x00040000,
+    SPELL_ATTR0_CU_BINARY_SPELL                  = 0x00100000,
+    SPELL_ATTR0_CU_SCHOOLMASK_NORMAL_WITH_MAGIC  = 0x00200000,
     SPELL_ATTR0_CU_LIQUID_AURA                   = 0x00400000,
+    SPELL_ATTR0_CU_DONT_RESET_PERIODIC_TIMER     = 0x00800000,
+    SPELL_ATTR0_CU_RESET_PERIODIC_TIMER          = 0x01000000,
 
     SPELL_ATTR0_CU_NEGATIVE                      = SPELL_ATTR0_CU_NEGATIVE_EFF0 | SPELL_ATTR0_CU_NEGATIVE_EFF1 | SPELL_ATTR0_CU_NEGATIVE_EFF2
 };
@@ -369,9 +376,11 @@ class TC_GAME_API SpellInfo
         uint32 CategoryRecoveryTime;
         uint32 StartRecoveryCategory;
         uint32 StartRecoveryTime;
-        uint32 InterruptFlags;
-        uint32 AuraInterruptFlags;
-        uint32 ChannelInterruptFlags;
+        EnumFlag<SpellInterruptFlags> InterruptFlags = SpellInterruptFlags::None;
+        EnumFlag<SpellAuraInterruptFlags> AuraInterruptFlags = SpellAuraInterruptFlags::None;
+        EnumFlag<SpellAuraInterruptFlags2> AuraInterruptFlags2 = SpellAuraInterruptFlags2::None;
+        EnumFlag<SpellAuraInterruptFlags> ChannelInterruptFlags = SpellAuraInterruptFlags::None;
+        EnumFlag<SpellAuraInterruptFlags2> ChannelInterruptFlags2 = SpellAuraInterruptFlags2::None;
         uint32 ProcFlags;
         uint32 ProcChance;
         uint32 ProcCharges;
@@ -411,6 +420,7 @@ class TC_GAME_API SpellInfo
         int32  AreaGroupId;
         uint32 SchoolMask;
         uint32 SpellDifficultyId;
+        float  BonusCoefficient;
         uint32 SpellScalingId;
         uint32 SpellAuraOptionsId;
         uint32 SpellAuraRestrictionsId;
@@ -478,6 +488,15 @@ class TC_GAME_API SpellInfo
         inline bool HasAttribute(SpellAttr10 attribute) const { return !!(AttributesEx10 & attribute); }
         inline bool HasAttribute(SpellCustomAttributes customAttribute) const { return !!(AttributesCu & customAttribute); }
 
+        bool CanBeInterrupted(Unit* interruptTarget) const;
+
+        bool HasAnyAuraInterruptFlag() const;
+        bool HasAuraInterruptFlag(SpellAuraInterruptFlags flag) const { return AuraInterruptFlags.HasFlag(flag); }
+        bool HasAuraInterruptFlag(SpellAuraInterruptFlags2 flag) const { return AuraInterruptFlags2.HasFlag(flag); }
+
+        bool HasChannelInterruptFlag(SpellAuraInterruptFlags flag) const { return ChannelInterruptFlags.HasFlag(flag); }
+        bool HasChannelInterruptFlag(SpellAuraInterruptFlags2 flag) const { return ChannelInterruptFlags2.HasFlag(flag); }
+
         bool IsExplicitDiscovery() const;
         bool IsLootCrafting() const;
         bool IsQuestTame() const;
@@ -516,7 +535,7 @@ class TC_GAME_API SpellInfo
         bool IsBreakingStealth() const;
         bool IsRangedWeaponSpell() const;
         bool IsAutoRepeatRangedSpell() const;
-        bool HasInitialAggro() const;
+        bool CausesInitialThreat() const;
 
         WeaponAttackType GetAttackType() const;
 
@@ -592,6 +611,12 @@ class TC_GAME_API SpellInfo
         bool SpellCancelsAuraEffect(SpellInfo const* auraSpellInfo, uint8 auraEffIndex) const;
 
         uint32 GetAllowedMechanicMask() const;
+
+        uint32 GetMechanicImmunityMask(Unit* caster) const;
+
+        float CalculateScaledCoefficient(Unit const* caster, float coefficient) const;
+
+        bool IsRollingDurationOver() const;
 
     private:
         // loading helpers

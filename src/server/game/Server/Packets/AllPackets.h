@@ -18,20 +18,28 @@
 #ifndef AllPackets_h__
 #define AllPackets_h__
 
+
+#include "AchievementPackets.h"
+#include "ArchaeologyPackets.h"
 #include "AuthenticationPackets.h"
 #include "BattlegroundPackets.h"
 #include "CharacterPackets.h"
 #include "CombatLogPackets.h"
 #include "CombatPackets.h"
 #include "GuildPackets.h"
+#include "InspectPackets.h"
+#include "InstancePackets.h"
 #include "ItemPackets.h"
 #include "LFGPackets.h"
 #include "MiscPackets.h"
 #include "MovementPackets.h"
 #include "NPCPackets.h"
+#include "PartyPackets.h"
 #include "QuestPackets.h"
 #include "QueryPackets.h"
+#include "SpellPackets.h"
 #include "SystemPackets.h"
+#include "TradePackets.h"
 #include "VehiclePackets.h"
 #include "WhoPackets.h"
 #include "WorldStatePackets.h"

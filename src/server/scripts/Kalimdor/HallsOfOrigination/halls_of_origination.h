@@ -45,19 +45,22 @@ enum HOOData
 
     // Anraphet
     DATA_BRANN_0,
-    DATA_VAULT_OF_LIGHTS_DOOR,
-    DATA_DEAD_ELEMENTALS,
-    DATA_LIGHTMACHINE_EARTH,
-    DATA_LIGHTMACHINE_AIR,
-    DATA_LIGHTMACHINE_FIRE,
-    DATA_LIGHTMACHINE_WATER,
-    DATA_LASERBEAMS_EARTH,
-    DATA_LASERBEAMS_AIR,
-    DATA_LASERBEAMS_FIRE,
-    DATA_LASERBEAMS_WATER,
-    DATA_UPDATE_LASERBEAMS,
-    DATA_ANRAPHET_SUN_MIRROR,
-    DATA_ANRAPHET_DOOR,
+    DATA_VAULT_OF_LIGHTS_ENTRANCE_DOOR,
+    DATA_LIGHT_MACHINE_1,
+    DATA_LIGHT_MACHINE_2,
+    DATA_LIGHT_MACHINE_3,
+    DATA_LIGHT_MACHINE_4,
+    DATA_LASER_BEAMS_1,
+    DATA_LASER_BEAMS_2,
+    DATA_LASER_BEAMS_3,
+    DATA_LASER_BEAMS_4,
+    DATA_SUN_MIRROR,
+    DATA_VAULT_OF_LIGHTS_BOSS_DOOR,
+    DATA_WARDEN_1_DIED,
+    DATA_WARDEN_2_DIED,
+    DATA_WARDEN_3_DIED,
+    DATA_WARDEN_4_DIED,
+    DATA_WARDEN_NUMBER,
     DATA_VAULT_OF_LIGHTS,
 
     // Earthrager Ptah
@@ -68,8 +71,6 @@ enum HOOData
     DATA_ISISET_ASTRAL_RAIN_ALIVE,
     DATA_ISISET_CELESTIAL_CALL_ALIVE,
     DATA_ISISET_VEIL_OF_SKY_ALIVE,
-
-    // Ammunae
 
     // Setesh
     DATA_SETESH_ADD_STALKER,
@@ -140,51 +141,52 @@ enum HOOCreatures
     NPC_INFERNO_LEAP                = 47040,
     NPC_BLAZING_INFERNO             = 40927,
     NPC_SUN_TOUCHED_SERVANT         = 39366,
+    NPC_SUN_TOUCHED_SPRITE          = 39369,
+    NPC_SUN_TOUCHED_SPRITELING      = 39370
 };
 
 enum HOOGameObjects
 {
-    GO_ANHUURS_BRIDGE               = 206506,
-    GO_BEACON_OF_LIGHT_NORMAL_1     = 203136,
-    GO_BEACON_OF_LIGHT_NORMAL_2     = 203133,
-    GO_BEACON_OF_LIGHT_HEROIC_1     = 207219,
-    GO_BEACON_OF_LIGHT_HEROIC_2     = 207218,
+    GO_ANHUURS_BRIDGE                   = 206506,
+    GO_BEACON_OF_LIGHT_NORMAL_1         = 203136,
+    GO_BEACON_OF_LIGHT_NORMAL_2         = 203133,
+    GO_BEACON_OF_LIGHT_HEROIC_1         = 207219,
+    GO_BEACON_OF_LIGHT_HEROIC_2         = 207218,
 
-    GO_DOODAD_ULDUM_ELEVATOR_COL01  = 207725,
-    GO_DOODAD_ULDUM_DOOR_14         = 202306,
-    GO_DOODAD_ULDUM_DOOR_15         = 202307,
+    GO_DOODAD_ULDUM_ELEVATOR_COL01      = 207725,
+    GO_DOODAD_ULDUM_DOOR_14             = 202306,
+    GO_DOODAD_ULDUM_DOOR_15             = 202307,
 
-    GO_VAULT_OF_LIGHTS_DOOR         = 202313,
-    GO_SUN_MIRROR                   = 207726,
-    GO_ANRAPHET_DOOR                = 202314,
+    GO_VAULT_OF_LIGHTS_ENTRANCE_DOOR    = 202313,
+    GO_SUN_MIRROR                       = 207726,
+    GO_VAULT_OF_LIGHTS_BOSS_DOOR        = 202314,
 
-    GO_DOODAD_ULDUM_LIGHTMACHINE_02 = 207374, // South-West
-    GO_DOODAD_ULDUM_LIGHTMACHINE_01 = 207375, // South-East
-    GO_DOODAD_ULDUM_LIGHTMACHINE_04 = 207376, // North-West
-    GO_DOODAD_ULDUM_LIGHTMACHINE_03 = 207377, // North-East
+    GO_DOODAD_ULDUM_LIGHTMACHINE_02     = 207374, // South-West
+    GO_DOODAD_ULDUM_LIGHTMACHINE_01     = 207375, // South-East
+    GO_DOODAD_ULDUM_LIGHTMACHINE_04     = 207376, // North-West
+    GO_DOODAD_ULDUM_LIGHTMACHINE_03     = 207377, // North-East
 
-    GO_DOODAD_ULDUM_LASERBEAMS01    = 207662, // South-West
-    GO_DOODAD_ULDUM_LASERBEAMS_01   = 207663, // South-East
-    GO_DOODAD_ULDUM_LASERBEAMS_02   = 207664, // North-West
-    GO_DOODAD_ULDUM_LASERBEAMS_03   = 207665, // North-East
+    GO_DOODAD_ULDUM_LASERBEAMS01        = 207662, // South-West
+    GO_DOODAD_ULDUM_LASERBEAMS_01       = 207663, // South-East
+    GO_DOODAD_ULDUM_LASERBEAMS_02       = 207664, // North-West
+    GO_DOODAD_ULDUM_LASERBEAMS_03       = 207665, // North-East
 
-    GO_ULDUM_TEMPLE                 = 207802,
-    GO_REORIGINATION_MECHANISM_1    = 207445,
-    GO_REORIGINATION_MECHANISM_2    = 207449,
-    GO_REORIGINATION_MECHANISM_3    = 207452,
-    GO_REORIGINATION_MECHANISM_4    = 207454,
-    GO_REORIGINATION_MECHANISM_5    = 207456,
+    GO_ULDUM_TEMPLE                     = 207802,
+    GO_REORIGINATION_MECHANISM_1        = 207445,
+    GO_REORIGINATION_MECHANISM_2        = 207449,
+    GO_REORIGINATION_MECHANISM_3        = 207452,
+    GO_REORIGINATION_MECHANISM_4        = 207454,
+    GO_REORIGINATION_MECHANISM_5        = 207456,
 
-    GO_HOO_TRANSIT_DEVICE           = 204979, // Spell ID: 82916 - Teleports the caster to the lower floor of Halls of Origination.
-    GO_HOO_TRANSIT_DEVICE_2         = 204972, // Spell ID: 82900 - Teleports the caster to the upper floor of Halls of Origination. (dbc desc is wrong)
-    GO_LIFT_OF_THE_MAKERS           = 207547,
-    GO_LIFT_GLASS_STAR              = 207673,
-    GO_LIFT_GLASS_STAR_2            = 207674
+    GO_HOO_TRANSIT_DEVICE               = 204979, // Spell ID: 82916 - Teleports the caster to the lower floor of Halls of Origination.
+    GO_HOO_TRANSIT_DEVICE_2             = 204972, // Spell ID: 82900 - Teleports the caster to the upper floor of Halls of Origination. (dbc desc is wrong)
+    GO_LIFT_OF_THE_MAKERS               = 207547,
+    GO_LIFT_GLASS_STAR                  = 207673,
+    GO_LIFT_GLASS_STAR_2                = 207674
 };
 
 enum Achievements
 {
-    WS_I_HATE_THIS_SONG                 = 5638,
     CRITERIA_STRAW_BROKE_CAMELS_BACK    = 15989,
     ACHIEV_VAULT_OF_LIGHTS_START_EVENT  = 24212,
     SPELL_VAULT_OF_LIGHTS_CREDIT        = 94067  // Achievement aura, not in DBC
@@ -208,11 +210,10 @@ enum HOOMisc
     SPELL_SUMMON_DUSTBONE_HORROR        = 75521
 };
 
-enum HOOGlobalActions
+enum HOOActions
 {
     ACTION_PTAH_ADD_DIED,
     ACTION_ANRAPHET_INTRO,
-    ACTION_ELEMENTAL_DIED,
     ACTION_ANRAPHET_DIED,
     ACTION_OMEGA_TRIGGER
 };
@@ -223,9 +224,16 @@ enum HoODataStates
     DISABLE_SHIELD_OF_LIGHT
 };
 
-enum HoOEvents
+enum HoOWorldStates
 {
-    EVENT_RESPAWN_ANRAPHET = 1
+    // Temple Guardian Anhuur
+    WORLD_STATE_ID_I_HATE_THAT_SONG                 = 5638,
+
+    // Vault of Lights
+    WORLD_STATE_ID_FASTER_THAN_THE_SPEED_OF_LIGHT   = 5653,
+
+    // Rajh
+    WORLD_STATE_ID_SUN_OF_A                         = 5639
 };
 
 Position const AnraphetSpawnPos     = { -90.2726f, 366.339f, 89.8639f,  3.14159f  };

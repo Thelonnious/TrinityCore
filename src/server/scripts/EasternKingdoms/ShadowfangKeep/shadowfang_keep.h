@@ -57,14 +57,13 @@ enum SKCreatures
 
     // Encounter related creatures
     /*Baron Silverlaine*/
-    NPC_NANDOS_DUMMY                = 51047,
+    NPC_WORGEN_SPIRIT_NANDOS        = 51047,
     NPC_WOLF_MASTER_NANDOS          = 50851,
-    NPC_LUPINE_SPECTRE              = 50923,
-    NPC_ODO_DUMMY                   = 50934,
+    NPC_WORGEN_SPIRIT_ODO           = 50934,
     NPC_ODO_THE_BLINDWATCHER        = 50857,
-    NPC_RAZORCLAW_DUMMY             = 51080,
+    NPC_WORGEN_SPIRIT_RAZORCLAW     = 51080,
     NPC_RAZORCLAW_THE_BUTCHER       = 50869,
-    NPC_RETHILGORE_DUMMY            = 51085,
+    NPC_WORGEN_SPIRIT_RETHILGORE    = 51085,
     NPC_RETHILGORE                  = 50834,
 
     /*Commander Springvale*/
@@ -93,6 +92,15 @@ enum SKGameObjectIds
     GO_COURTYARD_DOOR   = 18895,
     GO_SORCERERS_DOOR   = 18972,
     GO_ARUGALS_LAIR     = 18971
+};
+
+enum SKWorldStates
+{
+    // Baron Ashbury
+    WORLD_STATE_ID_PARDON_DENIED = 5670,
+
+    // Commander Springvale
+    WORLD_STATE_ID_TO_THE_GROUND = 5672
 };
 
 template<class AI>

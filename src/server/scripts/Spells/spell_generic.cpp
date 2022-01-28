@@ -1713,7 +1713,7 @@ class spell_ethereal_pet_aura : public AuraScript
         GetUnitOwner()->GetAllMinionsByEntry(minionList, NPC_ETHEREAL_SOUL_TRADER);
         for (Creature* minion : minionList)
         {
-            if (minion->IsAIEnabled)
+            if (minion->IsAIEnabled())
             {
                 minion->AI()->Talk(SAY_STEAL_ESSENCE);
                 minion->CastSpell(eventInfo.GetProcTarget(), SPELL_STEAL_ESSENCE_VISUAL);
@@ -3009,6 +3009,30 @@ class spell_gen_darkflight : public SpellScriptLoader
             return new spell_gen_darkflight_SpellScript();
         }
 };
+
+enum AlteredForm
+{
+    SPELL_ALTERED_FORM_PROC_AURA = 97681 // Serverside spell
+};
+
+class spell_gen_enable_worgen_altered_form : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_ALTERED_FORM_PROC_AURA });
+    }
+
+    void HandleApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->CastSpell(nullptr, SPELL_ALTERED_FORM_PROC_AURA, true);
+    }
+
+    void Register() override
+    {
+        AfterEffectApply.Register(&spell_gen_enable_worgen_altered_form::HandleApply, EFFECT_0, SPELL_AURA_ENABLE_ALTERED_FORM, AURA_EFFECT_HANDLE_REAL_OR_REAPPLY_MASK);
+    }
+};
+
 enum SeaforiumSpells
 {
     SPELL_PLANT_CHARGES_CREDIT_ACHIEVEMENT  = 60937
@@ -4471,7 +4495,7 @@ class spell_gen_blink : public SpellScriptLoader
                         if (Unit* target = caster->GetThreatManager().GetCurrentVictim())
                         {
                             caster->GetThreatManager().ResetThreat(target);
-                            if (caster->IsAIEnabled)
+                            if (caster->IsAIEnabled())
                             {
                                 caster->CastSpell(target, SPELL_BLINK_TARGET, true);
                                 caster->AI()->AttackStart(target);
@@ -5333,6 +5357,63 @@ class spell_gen_launch_quest_aura : public AuraScript
     }
 };
 
+// 46577 - Wounded
+class spell_gen_wounded : public SpellScript
+{
+    void HandleScriptEffect(SpellEffIndex /*effIndex*/)
+    {
+        Unit* target = GetHitUnit();
+        if (target->GetHealthPct() > 55.f)
+            target->SetHealth(CalculatePct(target->GetMaxHealth(), frand(15.f, 55.f)));
+    }
+
+    void Register() override
+    {
+        OnEffectHitTarget.Register(&spell_gen_wounded::HandleScriptEffect, EFFECT_0, SPELL_EFFECT_SCRIPT_EFFECT);
+    }
+};
+
+// 69041 - Rocket Barrage (Racial)
+class spell_gen_rocket_barrage : public SpellScript
+{
+    void HandleDamage(SpellEffIndex effIndex)
+    {
+        Unit* caster = GetCaster();
+        int32 basePoints = GetEffectValue() + caster->getLevel() * 2;
+        basePoints += caster->SpellBaseDamageBonusDone(GetSpellInfo()->GetSchoolMask()) * GetSpellInfo()->Effects[effIndex].BonusMultiplier;
+        basePoints += caster->GetTotalAttackPowerValue(caster->getClass() != CLASS_HUNTER ? BASE_ATTACK : RANGED_ATTACK) * GetSpellInfo()->BonusCoefficient;
+        SetEffectValue(basePoints);
+    }
+
+    void Register() override
+    {
+        OnEffectLaunchTarget.Register(&spell_gen_rocket_barrage::HandleDamage, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+    }
+};
+
+enum AuraProcRemoveSpells
+{
+    SPELL_FACE_RAGE = 99947
+};
+
+class spell_gen_face_rage : public AuraScript
+{
+    bool Validate(SpellInfo const* /*spell*/) override
+    {
+        return ValidateSpellInfo({ SPELL_FACE_RAGE });
+    }
+
+    void OnRemove(AuraEffect const* /*effect*/, AuraEffectHandleModes /*mode*/)
+    {
+        GetTarget()->RemoveAurasDueToSpell(GetSpellInfo()->Effects[EFFECT_2].TriggerSpell);
+    }
+
+    void Register() override
+    {
+        OnEffectRemove.Register(&spell_gen_face_rage::OnRemove, EFFECT_0, SPELL_AURA_MOD_STUN, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
 void AddSC_generic_spell_scripts()
 {
     new spell_gen_absorb0_hitlimit1();
@@ -5416,6 +5497,7 @@ void AddSC_generic_spell_scripts()
     new spell_gen_running_wild();
     new spell_gen_two_forms();
     new spell_gen_darkflight();
+    RegisterSpellScript(spell_gen_enable_worgen_altered_form);
     /*                          */
     new spell_gen_seaforium_blast();
     new spell_gen_spectator_cheer_trigger();
@@ -5464,4 +5546,7 @@ void AddSC_generic_spell_scripts()
     RegisterSpellScript(spell_gen_flask_of_battle);
     RegisterSpellScript(spell_gen_ghost);
     RegisterSpellScript(spell_gen_zero_energy_zero_regen);
+    RegisterSpellScript(spell_gen_wounded);
+    RegisterSpellScript(spell_gen_rocket_barrage);
+    RegisterSpellScript(spell_gen_face_rage);
 }

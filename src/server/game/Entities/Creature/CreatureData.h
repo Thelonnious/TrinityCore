@@ -28,6 +28,7 @@
 #include <vector>
 #include <cmath>
 
+class Spell;
 class WorldPacket;
 struct ItemTemplate;
 enum class VisibilityDistanceType : uint8;
@@ -104,21 +105,26 @@ enum class CreatureRandomMovementType : uint8
 
 struct TC_GAME_API CreatureMovementData
 {
-    CreatureMovementData() : Ground(CreatureGroundMovementType::Run), Flight(CreatureFlightMovementType::None),
-        Swim(true), Rooted(false), Random(CreatureRandomMovementType::Walk) { }
+    CreatureMovementData();
 
     CreatureGroundMovementType Ground;
     CreatureFlightMovementType Flight;
     bool Swim;
     bool Rooted;
     CreatureRandomMovementType Random;
+    uint32 InteractionPauseTimer;
 
     bool IsGroundAllowed() const { return Ground != CreatureGroundMovementType::None; }
     bool IsSwimAllowed() const { return Swim; }
     bool IsFlightAllowed() const { return Flight != CreatureFlightMovementType::None; }
     bool IsRooted() const { return Rooted; }
+    bool IsGravityDisabled() const { return  Flight == CreatureFlightMovementType::DisableGravity; }
+    bool CanFly() const { return  Flight == CreatureFlightMovementType::CanFly; }
+    bool IsHoverEnabled() const { return  Ground == CreatureGroundMovementType::Hover; }
 
     CreatureRandomMovementType GetRandom() const { return Random; }
+
+    uint32 GetInteractionPauseTimer() const { return InteractionPauseTimer; }
 
     std::string ToString() const;
 };
@@ -343,13 +349,14 @@ struct CreatureAddon
 // Vendors
 struct VendorItem
 {
-    VendorItem() : item(0), maxcount(0), incrtime(0), ExtendedCost(0), Type(0) { }
+    VendorItem() : item(0), maxcount(0), incrtime(0), ExtendedCost(0), Type(0), PlayerConditionId(0) { }
 
     uint32 item;
     uint32 maxcount;                                        // 0 for infinity item amount
     uint32 incrtime;                                        // time for restore items amount if maxcount != 0
     uint32 ExtendedCost;
     uint8  Type;
+    uint32 PlayerConditionId;
 
     //helpers
     bool IsGoldRequired(ItemTemplate const* pProto) const;
@@ -381,5 +388,29 @@ struct VendorItemData
 };
 
 typedef std::unordered_map<uint32, float /*SparringHealthLimit*/> CreatureSparringTemplateMap;
+
+struct CreatureMovementInfo
+{
+    float WalkSpeed = 0.f;
+    float RunSpeed = 0.f;
+
+    bool HasRunSpeedOverriden = false;
+    bool HasWalkSpeedOverriden = false;
+};
+
+struct CreatureSpellFocusData
+{
+    Spell const* FocusSpell = nullptr;
+    ObjectGuid OriginalUnitTarget;
+    uint32 ReacquiringTargetDelay = 0;
+    float OriginalOrientation = 0.f;
+
+public:
+    void Reset()
+    {
+        FocusSpell = nullptr;
+        ReacquiringTargetDelay = 0;
+    }
+};
 
 #endif // CreatureData_h__

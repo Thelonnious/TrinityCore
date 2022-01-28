@@ -283,6 +283,11 @@ static bool LoadDBC_assert_print(uint32 fsize, uint32 rsize, const std::string& 
     return false;
 }
 
+namespace
+{
+    std::unordered_map<uint32, std::vector<SkillLineAbilityEntry const*>> _skillLineAbilitiesBySkillupSkill;
+}
+
 template<class T>
 inline void LoadDBC(uint32& availableDbcLocales, StoreProblemList& errors, DBCStorage<T>& storage, std::string const& dbcPath, std::string const& filename, uint32 defaultLocale, std::string const& customFormat = std::string(), std::string const& customIndexName = std::string())
 {
@@ -615,6 +620,9 @@ void DBCManager::LoadStores(const std::string& dataPath, uint32 defaultLocale)
     for (PvPDifficultyEntry const* entry : sPvPDifficultyStore)
         if (entry->RangeIndex > MAX_BATTLEGROUND_BRACKETS)
             ASSERT(false && "Need update MAX_BATTLEGROUND_BRACKETS by DBC data");
+
+    for (SkillLineAbilityEntry const* skillLineAbility : sSkillLineAbilityStore)
+        _skillLineAbilitiesBySkillupSkill[skillLineAbility->SkillLine].push_back(skillLineAbility);
 
     for (SkillRaceClassInfoEntry const* entry : sSkillRaceClassInfoStore)
         if (sSkillLineStore.LookupEntry(entry->SkillID))
@@ -1268,6 +1276,11 @@ uint32 DBCManager::GetDefaultMapLight(uint32 mapId)
     return 0;
 }
 
+std::vector<SkillLineAbilityEntry const*> const* DBCManager::GetSkillLineAbilitiesBySkill(uint32 skillId) const
+{
+    return Trinity::Containers::MapGetValuePtr(_skillLineAbilitiesBySkillupSkill, skillId);
+}
+
 SkillRaceClassInfoEntry const* DBCManager::GetSkillRaceClassInfo(uint32 skill, uint8 race, uint8 class_)
 {
     SkillRaceClassInfoBounds bounds = SkillRaceClassInfoBySkill.equal_range(skill);
@@ -1313,23 +1326,6 @@ EmotesTextSoundEntry const* DBCManager::FindTextSoundEmoteFor(uint32 emote, uint
 {
     auto itr = sEmotesTextSoundMap.find(EmotesTextSoundKey(emote, race, gender));
     return itr != sEmotesTextSoundMap.end() ? itr->second : nullptr;
-}
-
-uint32 DBCManager::GetParentSpellCategoryId(uint32 childCategory)
-{
-    // Weekly profession reset linking
-    switch (childCategory)
-    {
-        case 1278: // Dream of Skywall
-        case 1279: // Dream of Azshara
-        case 1280: // Dream of Ragnaros
-        case 1281: // Dream of Deepholm
-        case 1282: // Dream of Hyjal
-            return 1328;
-        default:
-            return 0;
-    }
-    return 0;
 }
 
 bool DBCManager::IsInArea(uint32 objectAreaId, uint32 areaId)

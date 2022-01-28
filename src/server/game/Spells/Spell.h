@@ -29,9 +29,12 @@ namespace WorldPackets
 {
     namespace Spells
     {
+        struct SpellCastRequest;
         struct SpellTargetData;
         struct SpellAmmo;
+        struct SpellCastData;
         struct SpellHitInfo;
+        struct SpellHealPrediction;
     }
 }
 
@@ -46,6 +49,7 @@ class Item;
 class Object;
 class PathGenerator;
 class Player;
+class SpellEvent;
 class SpellImplicitTargetInfo;
 class SpellInfo;
 class SpellScript;
@@ -65,6 +69,7 @@ enum WeaponAttackType : uint8;
 
 #define SPELL_CHANNEL_UPDATE_INTERVAL (1 * IN_MILLISECONDS)
 #define MAX_SPELL_RANGE_TOLERANCE 3.0f
+#define TRAJECTORY_MISSILE_SIZE 3.0f
 
 enum SpellCastFlags
 {
@@ -72,7 +77,7 @@ enum SpellCastFlags
     CAST_FLAG_PENDING            = 0x00000001,              // aoe combat log?
     CAST_FLAG_HAS_TRAJECTORY     = 0x00000002,
     CAST_FLAG_UNKNOWN_3          = 0x00000004,
-    CAST_FLAG_UNKNOWN_4          = 0x00000008,              // ignore AOE visual
+    CAST_FLAG_HAS_WEIGHT         = 0x00000008,
     CAST_FLAG_UNKNOWN_5          = 0x00000010,
     CAST_FLAG_PROJECTILE         = 0x00000020,
     CAST_FLAG_UNKNOWN_7          = 0x00000040,
@@ -136,6 +141,7 @@ class TC_GAME_API SpellCastTargets
 {
     public:
         SpellCastTargets();
+        SpellCastTargets(Unit* caster, WorldPackets::Spells::SpellCastRequest const& spellCastRequest);
         ~SpellCastTargets();
 
         void Read(ByteBuffer& data, Unit* caster);
@@ -396,6 +402,7 @@ class TC_GAME_API Spell
         void EffectCastButtons(SpellEffIndex effIndex);
         void EffectRechargeManaGem(SpellEffIndex effIndex);
         void EffectGiveCurrency(SpellEffIndex effIndex);
+        void EffectSummonPersonalGameObject(SpellEffIndex effIndex);
         void EffectResurrectWithAura(SpellEffIndex effIndex);
         void EffectCreateAreaTrigger(SpellEffIndex effIndex);
         void EffectUpdatePlayerPhase(SpellEffIndex effIndex);
@@ -421,7 +428,7 @@ class TC_GAME_API Spell
         void SelectImplicitCasterObjectTargets(SpellEffIndex effIndex, SpellImplicitTargetInfo const& targetType);
         void SelectImplicitTargetObjectTargets(SpellEffIndex effIndex, SpellImplicitTargetInfo const& targetType);
         void SelectImplicitChainTargets(SpellEffIndex effIndex, SpellImplicitTargetInfo const& targetType, WorldObject* target, uint32 effMask);
-        void SelectImplicitTrajTargets(SpellEffIndex effIndex);
+        void SelectImplicitTrajTargets(SpellEffIndex effIndex, SpellImplicitTargetInfo const& targetType);
 
         void SelectEffectTypeImplicitTargets(uint8 effIndex);
 
@@ -529,6 +536,7 @@ class TC_GAME_API Spell
         UsedSpellMods m_appliedMods;
 
         int32 GetCastTime() const { return m_casttime; }
+        int32 GetRemainingCastTime() const { return m_timer; }
         bool IsAutoRepeat() const { return m_autoRepeat; }
         void SetAutoRepeat(bool rep) { m_autoRepeat = rep; }
         void ReSetTimer() { m_timer = m_casttime > 0 ? m_casttime : 0; }
@@ -548,6 +556,8 @@ class TC_GAME_API Spell
         uint64 GetDelayStart() const { return m_delayStart; }
         void SetDelayStart(uint64 m_time) { m_delayStart = m_time; }
         uint64 GetDelayMoment() const { return m_delayMoment; }
+        uint64 CalculateDelayMomentForDst() const;
+        void RecalculateDelayMomentForDst();
 
         bool IsNeedSendToClient() const;
 
@@ -755,6 +765,7 @@ class TC_GAME_API Spell
 
         void UpdateSpellCastDataTargets(WorldPackets::Spells::SpellHitInfo& data);
         void UpdateSpellCastDataAmmo(WorldPackets::Spells::SpellAmmo& data);
+        void UpdateSpellHealPrediction(WorldPackets::Spells::SpellHealPrediction& predict);
 
         SpellCastResult CanOpenLock(uint32 effIndex, uint32 lockid, SkillType& skillid, int32& reqSkillValue, int32& skillValue);
         // -------------------------------------------
@@ -762,6 +773,7 @@ class TC_GAME_API Spell
         uint32 m_spellState;
         int32 m_timer;
 
+        SpellEvent* _spellEvent;
         TriggerCastFlags _triggeredCastFlags;
 
         // if need this can be replaced by Aura copy
@@ -816,15 +828,19 @@ namespace Trinity
 
     struct TC_GAME_API WorldObjectSpellConeTargetCheck : public WorldObjectSpellAreaTargetCheck
     {
+        Position _coneSrc;
         float _coneAngle;
-        WorldObjectSpellConeTargetCheck(float coneAngle, float range, Unit* caster,
+        WorldObjectSpellConeTargetCheck(Position const& coneSrc, float coneAngle, float range, Unit* caster,
             SpellInfo const* spellInfo, SpellTargetCheckTypes selectionType, ConditionContainer* condList);
         bool operator()(WorldObject* target);
     };
 
-    struct TC_GAME_API WorldObjectSpellTrajTargetCheck : public WorldObjectSpellAreaTargetCheck
+    struct TC_GAME_API WorldObjectSpellTrajTargetCheck : public WorldObjectSpellTargetCheck
     {
-        WorldObjectSpellTrajTargetCheck(float range, Position const* position, Unit* caster, SpellInfo const* spellInfo);
+        float _range;
+        Position const* _position;
+        WorldObjectSpellTrajTargetCheck(float range, Position const* position, Unit* caster,
+            SpellInfo const* spellInfo, SpellTargetCheckTypes selectionType, ConditionContainer* condList);
         bool operator()(WorldObject* target);
     };
 }

@@ -135,8 +135,8 @@ void GuildMgr::LoadGuilds()
         QueryResult result = CharacterDatabase.Query("SELECT g.guildid, g.name, g.leaderguid, g.EmblemStyle, g.EmblemColor, g.BorderStyle, g.BorderColor, "
                                                      //   7                  8       9       10            11          12        13                14                 15
                                                      "g.BackgroundColor, g.info, g.motd, g.createdate, g.BankMoney, g.level, g.experience, g.todayExperience, COUNT(gbt.guildid), "
-                                                     //           16                           17                           18
-                                                     "g.completedDungeonChallenges, g.completedRaidChallenges, g.completedRatedBattlegroundChallenges "
+                                                     //           16                           17                           18                                 19
+                                                     "g.completedDungeonChallenges, g.completedRaidChallenges, g.completedRatedBattlegroundChallenges,  g.WeeklyBonusMoney "
                                                      "FROM guild g LEFT JOIN guild_bank_tab gbt ON g.guildid = gbt.guildid GROUP BY g.guildid ORDER BY g.guildid ASC");
 
         if (!result)
@@ -419,9 +419,9 @@ void GuildMgr::LoadGuilds()
         // Delete orphan guild bank items
         CharacterDatabase.DirectExecute("DELETE gbi FROM guild_bank_item gbi LEFT JOIN guild g ON gbi.guildId = g.guildId WHERE g.guildId IS NULL");
 
-                                                     //      0            1                2      3         4        5      6             7                 8           9             10
-        QueryResult result = CharacterDatabase.Query("SELECT creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyId, durability, creationTime, text, "
-                                                     //   11       12     13      14         15
+                                                     //      0            1                2      3         4        5      6             7                   8                 9           10            11
+        QueryResult result = CharacterDatabase.Query("SELECT creatorGuid, giftCreatorGuid, count, duration, charges, flags, enchantments, randomPropertyType, randomPropertyId, durability, creationTime, text, "
+                                                     //   12   13     14      15         16
                                                      "guildid, TabId, SlotId, item_guid, itemEntry FROM guild_bank_item gbi INNER JOIN item_instance ii ON gbi.item_guid = ii.guid");
 
         if (!result)
@@ -434,7 +434,7 @@ void GuildMgr::LoadGuilds()
             do
             {
                 Field* fields = result->Fetch();
-                uint32 guildId = fields[11].GetUInt32();
+                uint32 guildId = fields[12].GetUInt32();
 
                 if (Guild* guild = GetGuildById(guildId))
                     guild->LoadBankItemFromDB(fields);
@@ -645,12 +645,26 @@ void GuildMgr::ResetTimes(bool week)
     stmt->setUInt32(0, uint32(GameTime::GetGameTime() - time_t(30 * DAY)));
     CharacterDatabase.Execute(stmt);
 
-    // Reset week reputation for old guild member
+    // Reset week reputation for old guild member and reset weekly bonus money from cash flow contributions
     if (week)
+    {
         CharacterDatabase.Execute(CharacterDatabase.GetPreparedStatement(CHAR_RESET_OLD_GUILD_WEEK_REPUTATION));
-
+        CharacterDatabase.Execute(CharacterDatabase.GetPreparedStatement(CHAR_UPD_GUILD_WEEKLY_BONUS_MONEY));
+    }
 
     for (GuildContainer::const_iterator itr = GuildStore.begin(); itr != GuildStore.end(); ++itr)
         if (Guild* guild = itr->second)
             guild->ResetTimes(week);
+}
+
+void GuildMgr::ClearExpiredGuildNews()
+{
+    // Clean guild news that are older than a week
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_GUILD_NEWS);
+    stmt->setUInt64(0, uint64(GameTime::GetGameTime() - time_t(7 * DAY)));
+    CharacterDatabase.Execute(stmt);
+
+    for (std::pair<ObjectGuid::LowType, Guild*> guildPair : GuildStore)
+        if (Guild* guild = guildPair.second)
+            guild->ClearExpiredNews();
 }

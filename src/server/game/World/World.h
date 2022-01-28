@@ -142,7 +142,6 @@ enum WorldBoolConfigs
     CONFIG_START_ALL_SPELLS,
     CONFIG_START_ALL_EXPLORED,
     CONFIG_START_ALL_REP,
-    CONFIG_ALWAYS_MAXSKILL,
     CONFIG_PVP_TOKEN_ENABLE,
     CONFIG_NO_RESET_TALENT_COST,
     CONFIG_SHOW_KICK_IN_WORLD,
@@ -418,6 +417,7 @@ enum WorldIntConfigs
     CONFIG_RESPAWN_DYNAMICMINIMUM_GAMEOBJECT,
     CONFIG_RESPAWN_GUIDWARNING_FREQUENCY,
     CONFIG_RATED_BATTLEGROUND_ENABLE,
+    CONFIG_PENDING_MOVE_CHANGES_TIMEOUT,
     INT_CONFIG_VALUE_COUNT
 };
 
@@ -829,7 +829,7 @@ class TC_GAME_API World
         void InitRandomBGResetTime();
         void InitGuildResetTime();
         void ResetRandomBG();
-        void ResetGuildCap();
+        void PerformDailyGuildActions();
         void ResetCurrencyWeekCap();
     private:
         World();

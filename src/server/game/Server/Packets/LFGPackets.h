@@ -21,6 +21,7 @@
 #include "Packet.h"
 #include "LFGPacketsCommon.h"
 #include "Optional.h"
+#include <array>
 
 namespace lfg
 {
@@ -381,7 +382,7 @@ namespace WorldPackets
             uint32 Slot = 0;
             int8 State = 0;
             uint32 CompletedMask = 0;
-            uint8 Unused;
+            uint8 Unused = 0;
             bool ProposalSilent = false;
             std::vector<LFGProposalUpdatePlayer> Players;
         };

@@ -26,6 +26,7 @@
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "SpellPackets.h"
 #include "World.h"
 #include "WorldPacket.h"
 
@@ -238,45 +239,35 @@ void SpellHistory::WritePacket<Pet>(WorldPacket& packet) const
 }
 
 template<>
-void SpellHistory::WritePacket<Player>(WorldPacket& packet) const
+void SpellHistory::WriteSpellHistoryEntries<Player>(std::vector<WorldPackets::Spells::SpellHistoryEntry>& spellHistoryEntries) const
 {
     Clock::time_point now = GameTime::GetGameTimeSystemPoint();
 
-    packet << uint16(_spellCooldowns.size());
-
     for (auto const& spellCooldown : _spellCooldowns)
     {
-        packet << uint32(spellCooldown.first);
-        packet << uint32(spellCooldown.second.ItemId);        // cast item id
-        packet << uint16(spellCooldown.second.CategoryId);    // spell category
+        WorldPackets::Spells::SpellHistoryEntry& historyEntry = spellHistoryEntries.emplace_back();
+
+        historyEntry.SpellID = spellCooldown.first;
+        historyEntry.ItemID = spellCooldown.second.ItemId;
+        historyEntry.Category = spellCooldown.second.CategoryId;
 
         // send infinity cooldown in special format
         if (spellCooldown.second.OnHold)
         {
-            packet << uint32(1);                              // cooldown
-            packet << uint32(0x80000000);                     // category cooldown
+            historyEntry.RecoveryTime = 1;                                  // cooldown
+            historyEntry.CategoryRecoveryTime = 0x80000000;                 // category cooldown
             continue;
         }
 
         std::chrono::milliseconds cooldownDuration = std::chrono::duration_cast<std::chrono::milliseconds>(spellCooldown.second.CooldownEnd - now);
         if (cooldownDuration.count() <= 0)
-        {
-            packet << uint32(0);
-            packet << uint32(0);
             continue;
-        }
 
         std::chrono::milliseconds categoryDuration = std::chrono::duration_cast<std::chrono::milliseconds>(spellCooldown.second.CategoryEnd - now);
         if (categoryDuration.count() >= 0)
-        {
-            packet << uint32(0);                              // cooldown
-            packet << uint32(categoryDuration.count());       // category cooldown
-        }
+            historyEntry.CategoryRecoveryTime = categoryDuration.count();   // category cooldown
         else
-        {
-            packet << uint32(cooldownDuration.count());       // cooldown
-            packet << uint32(0);                              // category cooldown
-        }
+            historyEntry.RecoveryTime = cooldownDuration.count();           // cooldown
     }
 }
 
@@ -349,15 +340,15 @@ void SpellHistory::StartCooldown(SpellInfo const* spellInfo, uint32 itemId, Spel
             }
 
             SpellCategoryEntry const* categoryEntry = sSpellCategoryStore.AssertEntry(categoryId);
-            if (categoryEntry->Flags & SPELL_CATEGORY_FLAG_COOLDOWN_EXPIRES_AT_DAILY_RESET)
+            if (categoryEntry->GetFlags().HasFlag(SpellCategoryFlags::CooldownInDays))
             {
-                uint32 parentCategoryId = DBCManager::GetParentSpellCategoryId(categoryEntry->ID);
-                SpellCategoryEntry const* parentCategory = sSpellCategoryStore.LookupEntry(parentCategoryId);
+                uint32 days = std::max<int32>((categoryCooldown / 1000) - 1, 0);
 
-                if (parentCategory && parentCategory->UsesPerWeek)
-                    categoryCooldown = WEEK * IN_MILLISECONDS;
-                else
-                    categoryCooldown = int32(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::from_time_t(sWorld->GetNextDailyQuestsResetTime()) - Clock::now()).count());
+                // Initially start with the cooldown in plain days. Substract one day as we add the remaining cooldown until daily reset in the next step
+                categoryCooldown += int32(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours(days * 24)).count());
+
+                // Day based cooldowns have their reset at daily reset times so we now apply the remaining cooldown
+                categoryCooldown += int32(std::chrono::duration_cast<std::chrono::milliseconds>(Clock::from_time_t(sWorld->GetNextDailyQuestsResetTime()) - Clock::now()).count());
             }
         }
 
@@ -476,10 +467,10 @@ void SpellHistory::ResetCooldown(CooldownStorageType::iterator& itr, bool update
     {
         if (Player* playerOwner = GetPlayerOwner())
         {
-            WorldPacket data(SMSG_CLEAR_COOLDOWN, 4 + 8);
-            data << uint32(itr->first);
-            data << uint64(_owner->GetGUID());
-            playerOwner->SendDirectMessage(&data);
+            WorldPackets::Spells::ClearCooldown packet;
+            packet.SpellID = itr->first;
+            packet.CasterGUID = _owner->GetGUID();
+            playerOwner->SendDirectMessage(packet.Write());
         }
     }
 
@@ -648,6 +639,22 @@ void SpellHistory::CancelGlobalCooldown(SpellInfo const* spellInfo)
     _globalCooldowns[spellInfo->StartRecoveryCategory] = Clock::time_point(Clock::duration(0));
 }
 
+uint32 SpellHistory::GetRemainingGlobalCooldown(SpellInfo const* spellInfo) const
+{
+    Clock::time_point end;
+    auto cdItr = _globalCooldowns.find(spellInfo->StartRecoveryCategory);
+    if (cdItr == _globalCooldowns.end())
+        return 0;
+
+    end = cdItr->second;
+    Clock::time_point now = GameTime::GetGameTimeSystemPoint();
+    if (end < now)
+        return 0;
+
+    Clock::duration remaining = end - now;
+    return uint32(std::chrono::duration_cast<std::chrono::milliseconds>(remaining).count());
+}
+
 Player* SpellHistory::GetPlayerOwner() const
 {
     return _owner->GetCharmerOrOwnerPlayerOrPlayerItself();
@@ -657,33 +664,10 @@ void SpellHistory::SendClearCooldowns(std::vector<int32> const& cooldowns) const
 {
     if (Player* playerOwner = GetPlayerOwner())
     {
-        ObjectGuid guid = playerOwner->GetGUID();
-        WorldPacket data(SMSG_CLEAR_COOLDOWNS, 4 + 8);
-        data.WriteBit(guid[1]);
-        data.WriteBit(guid[3]);
-        data.WriteBit(guid[6]);
-        data.WriteBits(cooldowns.size(), 24); // Spell Count
-        data.WriteBit(guid[7]);
-        data.WriteBit(guid[5]);
-        data.WriteBit(guid[2]);
-        data.WriteBit(guid[4]);
-        data.WriteBit(guid[0]);
-
-        data.FlushBits();
-
-        data.WriteByteSeq(guid[7]);
-        data.WriteByteSeq(guid[2]);
-        data.WriteByteSeq(guid[4]);
-        data.WriteByteSeq(guid[5]);
-        data.WriteByteSeq(guid[1]);
-        data.WriteByteSeq(guid[3]);
-        for (int32 spell : cooldowns)
-            data << uint32(spell); // Spell ID
-
-        data.WriteByteSeq(guid[0]);
-        data.WriteByteSeq(guid[6]);
-
-        playerOwner->SendDirectMessage(&data);
+        WorldPackets::Spells::ClearCooldowns packet;
+        packet.Guid = playerOwner->GetGUID();
+        packet.SpellID = cooldowns;
+        playerOwner->SendDirectMessage(packet.Write());
     }
 }
 

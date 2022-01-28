@@ -67,6 +67,14 @@ namespace Trinity { struct ObjectUpdater; }
 namespace G3D { class Plane; }
 namespace VMAP { enum class ModelIgnoreFlags : uint32; }
 
+namespace WorldPackets
+{
+    namespace WorldState
+    {
+        struct WorldStateInfo;
+    }
+}
+
 struct ScriptAction
 {
     ObjectGuid sourceGUID;
@@ -88,7 +96,7 @@ union u_map_magic
 struct map_fileheader
 {
     u_map_magic mapMagic;
-    u_map_magic versionMagic;
+    uint32 versionMagic;
     uint32 buildMagic;
     uint32 areaMapOffset;
     uint32 areaMapSize;
@@ -300,10 +308,10 @@ struct CompareRespawnInfo
 {
     bool operator()(RespawnInfo const* a, RespawnInfo const* b) const;
 };
-typedef std::unordered_map<uint32 /*zoneId*/, ZoneDynamicInfo> ZoneDynamicInfoMap;
-typedef boost::heap::fibonacci_heap<RespawnInfo*, boost::heap::compare<CompareRespawnInfo>> RespawnListContainer;
-typedef RespawnListContainer::handle_type RespawnListHandle;
-typedef std::unordered_map<ObjectGuid::LowType, RespawnInfo*> RespawnInfoMap;
+using ZoneDynamicInfoMap = std::unordered_map<uint32 /*zoneId*/, ZoneDynamicInfo>;
+using RespawnListContainer = boost::heap::fibonacci_heap<RespawnInfo*, boost::heap::compare<CompareRespawnInfo>>;
+using RespawnListHandle = RespawnListContainer::handle_type;
+using RespawnInfoMap = std::unordered_map<ObjectGuid::LowType, RespawnInfo*>;
 struct RespawnInfo
 {
     SpawnObjectType type;
@@ -324,6 +332,25 @@ inline bool CompareRespawnInfo::operator()(RespawnInfo const* a, RespawnInfo con
     ASSERT(a->type != b->type, "Duplicate respawn entry for spawnId (%u,%u) found!", a->type, a->spawnId);
     return a->type < b->type;
 }
+
+struct TC_GAME_API SummonCreatureExtraArgs
+{
+public:
+    SummonCreatureExtraArgs() { }
+
+    SummonCreatureExtraArgs& SetSummonDuration(uint32 duration) { SummonDuration = duration; return *this; }
+
+    SummonPropertiesEntry const* SummonProperties = nullptr;
+    Unit* Summoner = nullptr;
+    uint32 SummonDuration = 0;
+    uint32 SummonSpellId = 0;
+    uint32 VehicleRecID = 0;
+    uint32 SummonHealth = 0;
+    uint32 RideSpell = 0;
+    uint8 SeatNumber = 0;
+    uint8 CreatureLevel = 0;
+    ObjectGuid PrivateObjectOwner;
+};
 
 class TC_GAME_API Map : public GridRefManager<NGridType>
 {
@@ -452,7 +479,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         bool GameObjectRespawnRelocation(GameObject* go, bool diffGridOnly);
 
         // assert print helper
-        bool CheckGridIntegrity(Creature* c, bool moved) const;
+        template <typename T>
+        static bool CheckGridIntegrity(T* object, bool moved, char const* objType);
 
         uint32 GetInstanceId() const { return i_InstanceId; }
         uint8 GetSpawnMode() const { return (i_spawnMode); }
@@ -508,7 +536,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         void AddWorldObject(WorldObject* obj) { i_worldObjects.insert(obj); }
         void RemoveWorldObject(WorldObject* obj) { i_worldObjects.erase(obj); }
 
-        void SendToPlayers(WorldPacket* data) const;
+        void SendToPlayers(WorldPacket const* data) const;
 
         typedef MapRefManager PlayerList;
         PlayerList const& GetPlayers() const { return m_mapRefManager; }
@@ -530,7 +558,7 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
         void UpdateIteratorBack(Player* player);
 
-        TempSummon* SummonCreature(uint32 entry, Position const& pos, SummonPropertiesEntry const* properties = nullptr, uint32 duration = 0, Unit* summoner = nullptr, uint32 spellId = 0, uint32 vehId = 0, bool visibleOnlyBySummoner = false, uint32 health = 0);
+        TempSummon* SummonCreature(uint32 entry, Position const& pos, SummonCreatureExtraArgs const& summonArgs = { });
         void SummonCreatureGroup(uint8 group, std::list<TempSummon*>* list = nullptr);
         Player* GetPlayer(ObjectGuid const& guid);
         AreaTrigger* GetAreaTrigger(ObjectGuid const& guid);
@@ -693,6 +721,9 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
 
         void SendInitSelf(Player* player);
 
+        template <typename T>
+        bool MapObjectCellRelocation(T* object, Cell new_cell, char const* objType);
+
         bool CreatureCellRelocation(Creature* creature, Cell new_cell);
         bool GameObjectCellRelocation(GameObject* go, Cell new_cell);
         bool DynamicObjectCellRelocation(DynamicObject* go, Cell new_cell);
@@ -809,18 +840,18 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         void DoRespawn(SpawnObjectType type, ObjectGuid::LowType spawnId, uint32 gridId);
         bool AddRespawnInfo(RespawnInfo const& info);
         void UnloadAllRespawnInfos();
+        RespawnInfo* GetRespawnInfo(SpawnObjectType type, ObjectGuid::LowType spawnId) const;
+        void Respawn(RespawnInfo* info, CharacterDatabaseTransaction dbTrans = nullptr);
         void DeleteRespawnInfo(RespawnInfo* info, CharacterDatabaseTransaction dbTrans = nullptr);
         void DeleteRespawnInfoFromDB(SpawnObjectType type, ObjectGuid::LowType spawnId, CharacterDatabaseTransaction dbTrans = nullptr);
 
     public:
-        void GetRespawnInfo(std::vector<RespawnInfo*>& respawnData, SpawnObjectTypeMask types) const;
-        RespawnInfo* GetRespawnInfo(SpawnObjectType type, ObjectGuid::LowType spawnId) const;
+        void GetRespawnInfo(std::vector<RespawnInfo const*>& respawnData, SpawnObjectTypeMask types) const;
         void Respawn(SpawnObjectType type, ObjectGuid::LowType spawnId, CharacterDatabaseTransaction dbTrans = nullptr)
         {
             if (RespawnInfo* info = GetRespawnInfo(type, spawnId))
                 Respawn(info, dbTrans);
         }
-        void Respawn(RespawnInfo* info, CharacterDatabaseTransaction dbTrans = nullptr);
         void RemoveRespawnTime(SpawnObjectType type, ObjectGuid::LowType spawnId, CharacterDatabaseTransaction dbTrans = nullptr, bool alwaysDeleteFromDB = false)
         {
             if (RespawnInfo* info = GetRespawnInfo(type, spawnId))
@@ -849,6 +880,10 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         // This will not affect any already-present creatures in the group
         void SetSpawnGroupInactive(uint32 groupId) { SetSpawnGroupActive(groupId, false); }
 
+        // Sets and stores world state values that will be used by the AchievementMgr to check additional criterias that require world state values
+        void SetWorldState(uint32 worldStateId, int32 value, bool withUpdatePacket = true);
+        int32 GetWorldStateValue(uint32 worldStateId) const;
+        void AppendWorldStates(std::vector<WorldPackets::WorldState::WorldStateInfo>& worldStates);
 
     private:
         // Type specific code for add/remove to/from grid
@@ -935,6 +970,8 @@ class TC_GAME_API Map : public GridRefManager<NGridType>
         std::unordered_set<Corpse*> _corpseBones;
 
         std::unordered_set<Object*> _updateObjects;
+
+        std::unordered_map<uint32 /*worldStateId*/, int32 /*value*/> _worldStates;
 };
 
 enum InstanceResetMethod

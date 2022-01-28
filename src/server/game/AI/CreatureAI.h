@@ -156,7 +156,7 @@ class TC_GAME_API CreatureAI : public UnitAI
         // Called at waypoint reached or point movement finished
         virtual void MovementInform(uint32 /*type*/, uint32 /*id*/) { }
 
-        void OnCharmed(bool apply) override;
+        void OnCharmed(bool isNew) override;
 
         virtual void OnSpellCastFinished(SpellInfo const* /*spell*/, SpellFinishReason /*reason*/) {  }
 
@@ -196,7 +196,7 @@ class TC_GAME_API CreatureAI : public UnitAI
         /// == Gossip system ================================
 
         // Called when the dialog status between a player and the creature is requested.
-        virtual Optional<QuestGiverStatus> GetDialogStatus(Player* /*player*/) { return boost::none; }
+        virtual Optional<QuestGiverStatus> GetDialogStatus(Player* /*player*/) { return std::nullopt; }
 
         // Called when a player opens a gossip dialog with the creature.
         virtual bool GossipHello(Player* /*player*/) { return false; }

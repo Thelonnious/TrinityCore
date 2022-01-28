@@ -82,7 +82,8 @@ enum RogueSpells
 enum RogueSpellIcons
 {
     ICON_ROGUE_IMPROVED_RECUPERATE                  = 4819,
-    ROGUE_ICON_ID_SERRATED_BLADES                   = 2004
+    ROGUE_ICON_ID_SERRATED_BLADES                   = 2004,
+    ROGUE_ICON_ID_SANGUINARY_VEIN                   = 4821
 };
 
 // 13877, 33735, (check 51211, 65956) - Blade Flurry
@@ -572,7 +573,7 @@ class spell_rog_preparation : public SpellScriptLoader
                     if (spellInfo->SpellFamilyName != SPELLFAMILY_ROGUE)
                         return false;
 
-                    return (spellInfo->SpellFamilyFlags[0] & SPELLFAMILYFLAG0_ROGUE_VAN_SPRINT) ||              // Vanish, Sprint
+                    return (spellInfo->SpellFamilyFlags[0] & SPELLFAMILYFLAG0_ROGUE_VAN_SPRINT || spellInfo->SpellFamilyFlags[1] & SPELLFAMILYFLAG1_ROGUE_SHADOWSTEP) ||              // Vanish, Sprint, Shadowstep
                         // Glyph of Preparation
                         (caster->HasAura(SPELL_ROGUE_GLYPH_OF_PREPARATION) &&
                         (spellInfo->SpellFamilyFlags[1] & SPELLFAMILYFLAG1_ROGUE_DISMANTLE_SMOKE_BOMB ||    // Dismantle, Smoke Bomb
@@ -1419,6 +1420,9 @@ class spell_rog_bandits_guile : public AuraScript
         uint32 spellId = SPELL_ROGUE_SHALLOW_INSIGHT;
         int32 basepoints = 10;
 
+        // Todo: validate if the required number of successful procs itself changes or if the proc chance of lower ranks is taking care of it already.
+        uint8 const neededProcs = 4;
+
         // We are striking a new opponent, reset progress
         if (_recentTargetGUID != procTarget->GetGUID())
         {
@@ -1426,24 +1430,34 @@ class spell_rog_bandits_guile : public AuraScript
             target->RemoveAurasDueToSpell(SPELL_ROGUE_MODERATE_INSIGHT, target->GetGUID());
             target->RemoveAurasDueToSpell(SPELL_ROGUE_DEEP_INSIGHT, target->GetGUID());
             _recentTargetGUID = procTarget->GetGUID();
+            _procStrikes = 0;
         }
 
+        _procStrikes = std::min<uint8>(_procStrikes + 1, neededProcs * 3);
+
+        if (_procStrikes < neededProcs)
+            return;
+
         // We are increasing our insight on the opponent
-        if (target->HasAura(SPELL_ROGUE_SHALLOW_INSIGHT, target->GetGUID()))
+        if (_procStrikes >= neededProcs * 3)
         {
-            target->RemoveAurasDueToSpell(SPELL_ROGUE_SHALLOW_INSIGHT, target->GetGUID());
+            spellId = SPELL_ROGUE_DEEP_INSIGHT;
+            basepoints = 30;
+            _procStrikes = 0;
+        }
+        else if (_procStrikes >= neededProcs * 2)
+        {
             spellId = SPELL_ROGUE_MODERATE_INSIGHT;
             basepoints = 20;
         }
-        else if (target->HasAura(SPELL_ROGUE_MODERATE_INSIGHT, target->GetGUID()))
-        {
-            target->RemoveAurasDueToSpell(SPELL_ROGUE_MODERATE_INSIGHT, target->GetGUID());
-            spellId = SPELL_ROGUE_DEEP_INSIGHT;
-            basepoints = 30;
-        }
 
-        target->CastSpell(target, spellId, true);
-        target->CastSpell(procTarget, SPELL_ROGUE_BANDITS_GUILE, CastSpellExtraArgs(true).AddSpellBP0(basepoints).AddSpellMod(SPELLVALUE_BASE_POINT1, basepoints));
+        if (spellId == SPELL_ROGUE_DEEP_INSIGHT && target->HasAura(SPELL_ROGUE_MODERATE_INSIGHT, target->GetGUID()))
+            target->RemoveAurasDueToSpell(SPELL_ROGUE_MODERATE_INSIGHT, target->GetGUID());
+        else if (spellId == SPELL_ROGUE_MODERATE_INSIGHT && target->HasAura(SPELL_ROGUE_SHALLOW_INSIGHT, target->GetGUID()))
+            target->RemoveAurasDueToSpell(SPELL_ROGUE_SHALLOW_INSIGHT, target->GetGUID());
+
+        target->CastSpell(target, spellId);
+        target->CastSpell(procTarget, SPELL_ROGUE_BANDITS_GUILE, CastSpellExtraArgs().AddSpellBP0(basepoints).AddSpellMod(SPELLVALUE_BASE_POINT1, basepoints));
     }
 
     void Register() override
@@ -1453,6 +1467,7 @@ class spell_rog_bandits_guile : public AuraScript
     }
 private:
     ObjectGuid _recentTargetGUID;
+    uint8 _procStrikes = 0;
 };
 
 // 14181 - Relentless Strikes
@@ -1475,6 +1490,28 @@ class spell_rog_relentless_strikes : public SpellScript
     }
 };
 
+// 1776 - Gouge
+class spell_rog_gouge : public AuraScript
+{
+    bool CheckProc(ProcEventInfo& eventInfo)
+    {
+        // Only the caster's bleed effects may cancel the effect
+        if (Unit* actor = eventInfo.GetActor())
+            if (actor == GetCaster() && eventInfo.GetSpellInfo())
+                if (eventInfo.GetSpellInfo()->SpellFamilyName == SPELLFAMILY_ROGUE && eventInfo.GetSpellInfo()->Mechanic == MECHANIC_BLEED)
+                    if (AuraEffect const* aurEff = actor->GetDummyAuraEffect(SPELLFAMILY_ROGUE, ROGUE_ICON_ID_SANGUINARY_VEIN, EFFECT_1))
+                        if (roll_chance_i(aurEff->GetAmount()))
+                            return false;
+
+        return true;
+    }
+
+    void Register() override
+    {
+        DoCheckProc.Register(&spell_rog_gouge::CheckProc);
+    }
+};
+
 void AddSC_rogue_spell_scripts()
 {
     RegisterSpellScript(spell_rog_bandits_guile);
@@ -1488,6 +1525,7 @@ void AddSC_rogue_spell_scripts()
     RegisterSpellScript(spell_rog_envenom);
     RegisterSpellScript(spell_rog_eviscerate);
     RegisterSpellScript(spell_rog_glyph_of_hemorrhage);
+    RegisterSpellScript(spell_rog_gouge);
     RegisterSpellScript(spell_rog_improved_expose_armor);
     new spell_rog_killing_spree();
     RegisterSpellScript(spell_rog_main_gauche);

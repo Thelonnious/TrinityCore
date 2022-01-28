@@ -20,7 +20,6 @@
 #include "MapDefines.h"
 #include "MapTree.h"
 #include "ModelInstance.h"
-#include "VMapFactory.h"
 #include "VMapManager2.h"
 #include <map>
 
@@ -79,7 +78,7 @@ struct map_liquidHeader
 
 namespace MMAP
 {
-    char const* MAP_VERSION_MAGIC = "v1.9";
+    uint32 const MAP_VERSION_MAGIC = 10;
 
     TerrainBuilder::TerrainBuilder(bool skipLiquid) : m_skipLiquid (skipLiquid){ }
     TerrainBuilder::~TerrainBuilder() { }
@@ -138,11 +137,12 @@ namespace MMAP
         FILE* mapFile = fopen(mapFileName, "rb");
         if (!mapFile)
         {
-            int32 parentMapId = static_cast<VMapManager2*>(VMapFactory::createOrGetVMapManager())->getParentMapId(mapID);
-            if (parentMapId != -1)
+            int32 parentMapId = sMapStore[mapID].ParentMapID;
+            while (!mapFile && parentMapId != -1)
             {
                 sprintf(mapFileName, "maps/%03u%02u%02u.map", parentMapId, tileY, tileX);
                 mapFile = fopen(mapFileName, "rb");
+                parentMapId = sMapStore[parentMapId].ParentMapID;
             }
         }
 
@@ -151,7 +151,7 @@ namespace MMAP
 
         map_fileheader fheader;
         if (fread(&fheader, sizeof(map_fileheader), 1, mapFile) != 1 ||
-            fheader.versionMagic != *((uint32 const*)(MAP_VERSION_MAGIC)))
+            fheader.versionMagic != MAP_VERSION_MAGIC)
         {
             fclose(mapFile);
             printf("%s is the wrong version, please extract new .map files\n", mapFileName);
@@ -501,10 +501,6 @@ namespace MMAP
                             minTLevel = h;
                     }
 
-                    // terrain under the liquid?
-                    if (minLLevel > maxTLevel)
-                        useTerrain = false;
-
                     //liquid under the terrain?
                     if (minTLevel > maxLLevel)
                         useLiquid = false;
@@ -643,7 +639,7 @@ namespace MMAP
     /**************************************************************************/
     bool TerrainBuilder::loadVMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData &meshData)
     {
-        VMapManager2* vmapManager = static_cast<VMapManager2*>(VMapFactory::createOrGetVMapManager());
+        std::unique_ptr<VMapManager2> vmapManager = VMapFactory::CreateVMapManager();
         int result = vmapManager->loadSingleMap(mapID, "vmaps", tileX, tileY);
         bool retval = false;
 
@@ -685,7 +681,7 @@ namespace MMAP
 
                 // transform data
                 float scale = instance.iScale;
-                G3D::Matrix3 rotation = G3D::Matrix3::fromEulerAnglesXYZ(G3D::pi()*instance.iRot.z/-180.f, G3D::pi()*instance.iRot.x/-180.f, G3D::pi()*instance.iRot.y/-180.f);
+                G3D::Matrix3 rotation = instance.GetInvRot();
                 G3D::Vector3 position = instance.iPos;
                 position.x -= 32*GRID_SIZE;
                 position.y -= 32*GRID_SIZE;

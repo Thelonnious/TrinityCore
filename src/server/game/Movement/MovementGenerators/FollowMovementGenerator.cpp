@@ -105,8 +105,8 @@ static void DoMovementInform(Unit* owner, Unit* target)
     if (owner->GetTypeId() != TYPEID_UNIT)
         return;
 
-    if (UnitAI* ai = owner->GetAI())
-        static_cast<CreatureAI*>(ai)->MovementInform(FOLLOW_MOTION_TYPE, target->GetGUID().GetCounter());
+    if (CreatureAI* AI = owner->ToCreature()->AI())
+        AI->MovementInform(FOLLOW_MOTION_TYPE, target->GetGUID().GetCounter());
 }
 
 static void GetFollowOffsets(uint8 followerIndex, float& distance, float& relativeAngle)
@@ -158,8 +158,8 @@ static void GetFollowOffsets(uint8 followerIndex, float& distance, float& relati
 FollowMovementGenerator::FollowMovementGenerator(Unit* target, Optional<float> distance, Optional<float> angle, bool joinFormation /*= true*/, bool catchUpToTarget /*= false*/, bool faceTarget /*= false*/) :
     AbstractPursuer(PursuingType::Follow, ASSERT_NOTNULL(target)), _joinFormation(joinFormation), _catchUpToTarget(catchUpToTarget), _faceTarget(faceTarget)
 {
-    _distance = distance ? distance.get() : 0.f;
-    _angle = angle ? angle.get() : 0.f;
+    _distance = distance ? distance.value() : 0.f;
+    _angle = angle ? angle.value() : 0.f;
 }
 
 FollowMovementGenerator::~FollowMovementGenerator() { }
@@ -316,16 +316,7 @@ void FollowMovementGenerator::LaunchMovement(Unit* owner)
 
     // Strafe handling for player sidewards movement
     if (target->IsPlayer())
-    {
-        if (target->HasUnitMovementFlag(MOVEMENTFLAG_STRAFE_LEFT))
-            offset = target->HasUnitMovementFlag(MOVEMENTFLAG_FORWARD) ? float(M_PI_4) : float(M_PI_2);
-
-        if (target->HasUnitMovementFlag(MOVEMENTFLAG_STRAFE_RIGHT))
-            offset = target->HasUnitMovementFlag(MOVEMENTFLAG_FORWARD) ? -float(M_PI_4) : -float(M_PI_2);
-
-        if (target->HasUnitMovementFlag(MOVEMENTFLAG_BACKWARD))
-            offset += float(M_PI);
-    }
+        offset = target->m_movementInfo.GetMovementDirection();
 
     // Let's start with a cheap base destination calculation
     dest.m_positionX += std::cos(Position::NormalizeOrientation(target->GetOrientation() + _angle)) * _distance;

@@ -27,6 +27,7 @@
 #include "Player.h"
 #include "Spell.h"
 #include "SpellInfo.h"
+#include "TemporarySummon.h"
 #include "UnitAI.h"
 #include "UpdateData.h"
 
@@ -793,10 +794,11 @@ namespace Trinity
 
     // Unit checks
 
-    class MostHPMissingInRange
+    class FriendlyMostHPMissingInRange
     {
         public:
-            MostHPMissingInRange(Unit const* obj, float range, uint32 hp) : i_obj(obj), i_range(range), i_hp(hp) { }
+            FriendlyMostHPMissingInRange(Unit const* obj, float range, uint32 hp) : i_obj(obj), i_range(range), i_hp(hp) { }
+
             bool operator()(Unit* u)
             {
                 if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) && u->GetMaxHealth() - u->GetHealth() > i_hp)
@@ -810,6 +812,27 @@ namespace Trinity
             Unit const* i_obj;
             float i_range;
             uint32 i_hp;
+    };
+
+    class FriendlyMostHPPctMissingInRange
+    {
+    public:
+        FriendlyMostHPPctMissingInRange(Unit const* obj, float range, uint8 hpPctMin, uint8 hpPctMax) : i_obj(obj), i_range(range), i_hpPctMin(hpPctMin), i_hpPctMax(hpPctMax) { }
+
+        bool operator()(Unit* u)
+        {
+            if (u->IsAlive() && u->IsInCombat() && !i_obj->IsHostileTo(u) && i_obj->IsWithinDistInMap(u, i_range) && u->GetHealthPct() > i_hpPctMin && u->GetHealthPct() < i_hpPctMax)
+            {
+                i_hpPctMax = u->GetHealthPct();
+                return true;
+            }
+            return false;
+        }
+    private:
+        Unit const* i_obj;
+        float i_range;
+        uint8 i_hpPctMin;
+        uint8 i_hpPctMax;
     };
 
     class FriendlyBelowHpPctEntryInRange
@@ -922,10 +945,14 @@ namespace Trinity
     class AnyFriendlyUnitInObjectRangeCheck
     {
         public:
-            AnyFriendlyUnitInObjectRangeCheck(WorldObject const* obj, Unit const* funit, float range, bool playerOnly = false) : i_obj(obj), i_funit(funit), i_range(range), i_playerOnly(playerOnly) { }
+            AnyFriendlyUnitInObjectRangeCheck(WorldObject const* obj, Unit const* funit, float range, bool playerOnly = false, bool noPlayerTarget = false) : i_obj(obj), i_funit(funit), i_range(range), i_playerOnly(playerOnly), i_noPlayerTarget(noPlayerTarget) { }
             bool operator()(Unit* u)
             {
-                if (u->IsAlive() && i_obj->IsWithinDistInMap(u, i_range) && i_funit->IsFriendlyTo(u) && (!i_playerOnly || u->GetTypeId() == TYPEID_PLAYER))
+                if (u->IsAlive()
+                    && i_obj->IsWithinDistInMap(u, i_range)
+                    && i_funit->IsFriendlyTo(u)
+                    && (!i_playerOnly || u->GetTypeId() == TYPEID_PLAYER)
+                    && (!i_noPlayerTarget || u->GetTypeId() != TYPEID_PLAYER))
                     return true;
                 else
                     return false;
@@ -935,6 +962,7 @@ namespace Trinity
             Unit const* i_funit;
             float i_range;
             bool i_playerOnly;
+            bool i_noPlayerTarget;
     };
 
     class AnyGroupedUnitInObjectRangeCheck
@@ -1031,6 +1059,9 @@ namespace Trinity
                 if (_spellInfo && _spellInfo->HasAttribute(SPELL_ATTR3_ONLY_TARGET_PLAYERS) && u->GetTypeId() != TYPEID_PLAYER)
                     return false;
 
+                if (_spellInfo && _spellInfo->HasAttribute(SPELL_ATTR5_DONT_TARGET_PLAYERS) && u->GetTypeId() == TYPEID_PLAYER)
+                    return false;
+
                 return i_funit->_IsValidAttackTarget(u, _spellInfo, i_obj->GetTypeId() == TYPEID_DYNAMICOBJECT ? i_obj : nullptr) && i_obj->IsWithinDistInMap(u, i_range);
             }
         private:
@@ -1065,8 +1096,7 @@ namespace Trinity
                 if (!u->IsWithinLOSInMap(i_enemy))
                     return;
 
-                if (u->GetAI() && u->IsAIEnabled)
-                    u->GetAI()->AttackStart(i_enemy);
+                u->EngageWithTarget(i_enemy);
             }
         private:
             Unit* const i_funit;
@@ -1255,7 +1285,12 @@ namespace Trinity
 
             bool operator()(Creature* u)
             {
-                if (u->getDeathState() != DEAD && u->GetEntry() == i_entry && u->IsAlive() == i_alive && u->GetGUID() != i_obj.GetGUID() && i_obj.IsWithinDistInMap(u, i_range))
+                if (u->getDeathState() != DEAD
+                    && u->GetEntry() == i_entry
+                    && u->IsAlive() == i_alive
+                    && u->GetGUID() != i_obj.GetGUID()
+                    && i_obj.IsWithinDistInMap(u, i_range)
+                    && u->CheckPrivateObjectOwnerVisibility(&i_obj))
                 {
                     i_range = i_obj.GetDistance(u);         // use found unit range as new range limit for next check
                     return true;

@@ -16,12 +16,14 @@
  */
 
 #include "SpellPackets.h"
+#include "Spell.h"
+#include "SpellInfo.h"
 
 ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellHealPrediction const& predict)
 {
     data << int32(predict.Points);
     data << uint8(predict.Type);
-    if (predict.BeaconGUID.is_initialized())
+    if (predict.BeaconGUID.has_value())
         data << predict.BeaconGUID->WriteAsPacked();
     return data;
 }
@@ -75,10 +77,10 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellTargetData c
 {
     data << uint32(spellTargetData.Flags);
 
-    if (spellTargetData.Unit.is_initialized())
+    if (spellTargetData.Unit.has_value())
         data << spellTargetData.Unit->WriteAsPacked();
 
-    if (spellTargetData.Item.is_initialized())
+    if (spellTargetData.Item.has_value())
         data << spellTargetData.Item->WriteAsPacked();
 
     if (spellTargetData.SrcLocation)
@@ -87,7 +89,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellTargetData c
     if (spellTargetData.DstLocation)
         data << *spellTargetData.DstLocation;
 
-    if (spellTargetData.Name.is_initialized())
+    if (spellTargetData.Name.has_value())
         data << *spellTargetData.Name;
 
     return data;
@@ -121,11 +123,25 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellCastData con
     data << uint32(spellCastData.CastTime);
 
     if (spellCastData.HitInfo)
+    {
+        // Hit and miss target counts are both uint8, that limits us to 255 targets for each
+        // sending more than 255 targets crashes the client (since count sent would be wrong)
+        // Spells like 40647 (with a huge radius) can easily reach this limit (spell might need
+        // target conditions but we still need to limit the number of targets sent and keeping
+        // correct count for both hit and miss).
+        static std::size_t const PACKET_TARGET_LIMIT = std::numeric_limits<uint8>::max();
+        if (spellCastData.HitInfo->HitTargets.size() > PACKET_TARGET_LIMIT)
+            spellCastData.HitInfo->HitTargets.resize(PACKET_TARGET_LIMIT);
+
+        if (spellCastData.HitInfo->MissStatus.size() > PACKET_TARGET_LIMIT)
+            spellCastData.HitInfo->MissStatus.resize(PACKET_TARGET_LIMIT);
+
         data << *spellCastData.HitInfo;
+    }
 
     data << spellCastData.Target;
 
-    if (spellCastData.RemainingPower.is_initialized())
+    if (spellCastData.RemainingPower.has_value())
         data << uint32(*spellCastData.RemainingPower);
 
     if (spellCastData.RemainingRunes)
@@ -140,7 +156,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::SpellCastData con
     if (spellCastData.ProjectileVisuals)
         data << *spellCastData.ProjectileVisuals;
 
-    if (spellCastData.DestLocSpellCastIndex.is_initialized())
+    if (spellCastData.DestLocSpellCastIndex.has_value())
         data << uint8(*spellCastData.DestLocSpellCastIndex);
 
     // Todo: TARGET_FLAG_EXTRA_TARGETS (unused as it seems though)
@@ -188,11 +204,11 @@ WorldPacket const* WorldPackets::Spells::ChannelStart::Write()
     _worldPacket << uint32(SpellID);
     _worldPacket << int32(ChannelDuration);
 
-    _worldPacket << uint8(InterruptImmunities.is_initialized());
+    _worldPacket << uint8(InterruptImmunities.has_value());
     if (InterruptImmunities)
         _worldPacket << *InterruptImmunities;
 
-    _worldPacket << uint8(HealPrediction.is_initialized());
+    _worldPacket << uint8(HealPrediction.has_value());
     if (HealPrediction)
         _worldPacket << *HealPrediction;
 
@@ -217,7 +233,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::AuraDataInfo cons
     data << uint8(auraData.Applications);
 
     if (auraData.CastUnit)
-        data << auraData.CastUnit.get().WriteAsPacked();
+        data << auraData.CastUnit.value().WriteAsPacked();
 
     if (auraData.Duration)
         data << int32(*auraData.Duration);
@@ -226,7 +242,7 @@ ByteBuffer& operator<<(ByteBuffer& data, WorldPackets::Spells::AuraDataInfo cons
         data << int32(*auraData.Remaining);
 
     for (uint8 i = 0; i < 3 /*MAX_SPELL_EFFECTS*/; ++i)
-        if (auraData.Points[i].is_initialized())
+        if (auraData.Points[i].has_value())
             data << int32(*auraData.Points[i]);
 
     return data;
@@ -299,6 +315,56 @@ WorldPacket const* WorldPackets::Spells::CategoryCooldown::Write()
         _worldPacket << uint32(cooldown.Category);
         _worldPacket << int32(cooldown.ModCooldown);
     }
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Spells::PlaySpellVisual::Write()
+{
+    _worldPacket << float(TargetPosition.GetPositionZ());
+    _worldPacket << int32(SpellVisualID);
+    _worldPacket << uint16(MissReason);
+    _worldPacket << float(TargetPosition.GetOrientation());
+    _worldPacket << float(TargetPosition.GetPositionX());
+    _worldPacket << uint16(ReflectStatus);
+    _worldPacket << float(TargetPosition.GetPositionY());
+
+    _worldPacket.WriteBit(Target[1]);
+    _worldPacket.WriteBit(Source[3]);
+    _worldPacket.WriteBit(Source[0]);
+    _worldPacket.WriteBit(Target[2]);
+    _worldPacket.WriteBit(Target[5]);
+    _worldPacket.WriteBit(Source[2]);
+    _worldPacket.WriteBit(Source[4]);
+    _worldPacket.WriteBit(Target[6]);
+
+    _worldPacket.WriteBit(SpeedAsTime);
+
+    _worldPacket.WriteBit(Source[6]);
+    _worldPacket.WriteBit(Target[7]);
+    _worldPacket.WriteBit(Source[5]);
+    _worldPacket.WriteBit(Source[1]);
+    _worldPacket.WriteBit(Source[7]);
+    _worldPacket.WriteBit(Target[3]);
+    _worldPacket.WriteBit(Target[4]);
+    _worldPacket.FlushBits();
+
+    _worldPacket.WriteByteSeq(Source[7]);
+    _worldPacket.WriteByteSeq(Source[4]);
+    _worldPacket.WriteByteSeq(Target[7]);
+    _worldPacket.WriteByteSeq(Source[1]);
+    _worldPacket.WriteByteSeq(Source[3]);
+    _worldPacket.WriteByteSeq(Source[0]);
+    _worldPacket.WriteByteSeq(Source[6]);
+    _worldPacket.WriteByteSeq(Target[0]);
+    _worldPacket.WriteByteSeq(Target[4]);
+    _worldPacket.WriteByteSeq(Source[5]);
+    _worldPacket.WriteByteSeq(Target[1]);
+    _worldPacket.WriteByteSeq(Target[5]);
+    _worldPacket.WriteByteSeq(Target[6]);
+    _worldPacket.WriteByteSeq(Target[2]);
+    _worldPacket.WriteByteSeq(Source[2]);
+    _worldPacket.WriteByteSeq(Target[3]);
 
     return &_worldPacket;
 }
@@ -463,6 +529,491 @@ WorldPacket const* WorldPackets::Spells::AuraPointsDepleted::Write()
     _worldPacket << uint8(Slot);
     _worldPacket.WriteByteSeq(Unit[6]);
     _worldPacket.WriteByteSeq(Unit[1]);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Spells::SpellFailure::Write()
+{
+    _worldPacket << CasterUnit.WriteAsPacked();
+    _worldPacket << uint8(CastID);
+    _worldPacket << int32(SpellID);
+    _worldPacket << uint8(Reason);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Spells::SpellFailedOther::Write()
+{
+    _worldPacket << CasterUnit.WriteAsPacked();
+    _worldPacket << uint8(CastID);
+    _worldPacket << int32(SpellID);
+    _worldPacket << uint8(Reason);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Spells::ResurrectRequest::Write()
+{
+    _worldPacket << ResurrectOffererGUID;
+    _worldPacket << uint32(Name.length() + 1);
+    _worldPacket << Name; // client expects a null-terminated string
+    _worldPacket << bool(Sickness);
+    _worldPacket << bool(UseTimer);
+    _worldPacket << int32(SpellID);
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Spells::SpellDelayed::Write()
+{
+    _worldPacket << Caster.WriteAsPacked();
+    _worldPacket << int32(ActualDelay);
+    return &_worldPacket;
+}
+
+ByteBuffer& operator>>(ByteBuffer& data, Optional<WorldPackets::Spells::TargetLocation>& location)
+{
+    location.emplace();
+    data >> location->Transport.ReadAsPacked();
+    data >> location->Location.m_positionX;
+    data >> location->Location.m_positionY;
+    data >> location->Location.m_positionZ;
+
+    return data;
+}
+
+ByteBuffer& operator>>(ByteBuffer& data, WorldPackets::Spells::SpellTargetData& targetData)
+{
+    data >> targetData.Flags;
+
+    if (targetData.Flags & (TARGET_FLAG_UNIT | TARGET_FLAG_UNIT_MINIPET | TARGET_FLAG_GAMEOBJECT | TARGET_FLAG_CORPSE_ENEMY | TARGET_FLAG_CORPSE_ALLY))
+    {
+        targetData.Unit.emplace();
+        data >> targetData.Unit->ReadAsPacked();
+    }
+
+    if (targetData.Flags & (TARGET_FLAG_ITEM | TARGET_FLAG_TRADE_ITEM))
+    {
+        targetData.Item.emplace();
+        data >> targetData.Item->ReadAsPacked();
+    }
+
+    if (targetData.Flags & TARGET_FLAG_SOURCE_LOCATION)
+        data >> targetData.SrcLocation;
+
+    if (targetData.Flags & TARGET_FLAG_DEST_LOCATION)
+        data >> targetData.DstLocation;
+
+    if (targetData.Flags & TARGET_FLAG_STRING)
+    {
+        targetData.Name.emplace();
+        data >> *targetData.Name;
+    }
+
+    return data;
+}
+
+ByteBuffer& operator>>(ByteBuffer& data, Optional<MovementInfo>& movementInfo)
+{
+    movementInfo.emplace();
+    data >> movementInfo->pos.m_positionZ;
+    data >> movementInfo->pos.m_positionY;
+    data >> movementInfo->pos.m_positionX;
+
+    bool hasFallData = data.ReadBit();
+    bool hasTime = !data.ReadBit();
+    bool hasFacing = !data.ReadBit();
+
+    data.ReadBit(); // HasSpline
+    data.ReadBit(); // HeightChangeFailed
+
+    movementInfo->guid[6] = data.ReadBit();
+    movementInfo->guid[4] = data.ReadBit();
+
+    bool hasExtraMovementFlags = !data.ReadBit();
+
+    movementInfo->guid[3] = data.ReadBit();
+    movementInfo->guid[5] = data.ReadBit();
+
+    bool hasSplineElevation = !data.ReadBit();
+    bool hasPitch = !data.ReadBit();
+
+    movementInfo->guid[7] = data.ReadBit();
+
+    bool hasTransportData = data.ReadBit();
+
+    movementInfo->guid[2] = data.ReadBit();
+
+    bool hasMovementFlags = !data.ReadBit();
+
+    movementInfo->guid[1] = data.ReadBit();
+    movementInfo->guid[0] = data.ReadBit();
+
+    bool hasTransportTime2 = false;
+    bool hasVehicleRecId = false;
+    if (hasTransportData)
+    {
+        movementInfo->transport.guid[6] = data.ReadBit();
+        movementInfo->transport.guid[2] = data.ReadBit();
+        movementInfo->transport.guid[5] = data.ReadBit();
+        hasTransportTime2 = data.ReadBit();
+        movementInfo->transport.guid[7] = data.ReadBit();
+        movementInfo->transport.guid[4] = data.ReadBit();
+        hasVehicleRecId = data.ReadBit();
+        movementInfo->transport.guid[0] = data.ReadBit();
+        movementInfo->transport.guid[1] = data.ReadBit();
+        movementInfo->transport.guid[3] = data.ReadBit();
+    }
+
+    if (hasExtraMovementFlags)
+        movementInfo->SetExtraMovementFlags(data.ReadBits(12));
+
+    if (hasMovementFlags)
+        movementInfo->SetMovementFlags(data.ReadBits(30));
+
+    bool hasFallDirection = false;
+    if (hasFallData)
+        hasFallDirection = data.ReadBit();
+
+    data.ReadByteSeq(movementInfo->guid[1]);
+    data.ReadByteSeq(movementInfo->guid[4]);
+    data.ReadByteSeq(movementInfo->guid[7]);
+    data.ReadByteSeq(movementInfo->guid[3]);
+    data.ReadByteSeq(movementInfo->guid[0]);
+    data.ReadByteSeq(movementInfo->guid[2]);
+    data.ReadByteSeq(movementInfo->guid[5]);
+    data.ReadByteSeq(movementInfo->guid[6]);
+
+    if (hasTransportData)
+    {
+        data >> movementInfo->transport.seat;
+        movementInfo->transport.pos.SetOrientation(data.read<float>());
+        data >> movementInfo->transport.time;
+
+        data.ReadByteSeq(movementInfo->transport.guid[6]);
+        data.ReadByteSeq(movementInfo->transport.guid[5]);
+
+        if (hasTransportTime2)
+            data >> movementInfo->transport.time2;
+
+        data >> movementInfo->transport.pos.m_positionX;
+
+        data.ReadByteSeq(movementInfo->transport.guid[4]);
+
+        data >> movementInfo->transport.pos.m_positionZ;
+
+        data.ReadByteSeq(movementInfo->transport.guid[2]);
+        data.ReadByteSeq(movementInfo->transport.guid[0]);
+
+        if (hasVehicleRecId)
+            data >> movementInfo->transport.vehicleId;
+
+        data.ReadByteSeq(movementInfo->transport.guid[1]);
+        data.ReadByteSeq(movementInfo->transport.guid[3]);
+
+        data >> movementInfo->transport.pos.m_positionY;
+
+        data.ReadByteSeq(movementInfo->transport.guid[7]);
+    }
+
+    if (hasFacing)
+        movementInfo->pos.SetOrientation(data.read<float>());
+
+    if (hasSplineElevation)
+        data >> movementInfo->splineElevation;
+
+    if (hasFallData)
+    {
+        data >> movementInfo->jump.fallTime;
+        if (hasFallDirection)
+        {
+            data >> movementInfo->jump.sinAngle;
+            data >> movementInfo->jump.cosAngle;
+            data >> movementInfo->jump.xyspeed;
+        }
+        data >> movementInfo->jump.zspeed;
+    }
+
+    if (hasTime)
+        data >> movementInfo->time;
+
+    if (hasPitch)
+        data >> movementInfo->pitch;
+
+    return data;
+}
+
+ByteBuffer& operator>>(ByteBuffer& data, WorldPackets::Spells::MissileTrajectoryRequest& missileTrajectory)
+{
+    data >> missileTrajectory.Pitch;
+    data >> missileTrajectory.Speed;
+
+    return data;
+}
+
+ByteBuffer& operator>>(ByteBuffer& data, WorldPackets::Spells::SpellCastRequest& castRequest)
+{
+    data >> castRequest.CastID;
+    data >> castRequest.SpellID;
+    data >> castRequest.Misc;
+    data >> castRequest.SendCastFlags;
+    data >> castRequest.Target;
+
+    if (castRequest.SendCastFlags & CAST_FLAG_HAS_TRAJECTORY)
+    {
+        data >> castRequest.MissileTrajectory;
+        bool hasMovementData = data.read<bool>();
+        if (hasMovementData)
+            data >> castRequest.MoveUpdate;
+    }
+
+    if (castRequest.SendCastFlags & CAST_FLAG_HAS_WEIGHT)
+    {
+        uint32 weightCount = data.read<uint32>();
+        castRequest.Weight.resize(weightCount);
+
+        for (WorldPackets::Spells::SpellWeight& weight : castRequest.Weight)
+        {
+            data >> weight.Type;
+            data >> weight.ID;
+            data >> weight.Quantity;
+        }
+    }
+
+    return data;
+}
+
+void WorldPackets::Spells::CastSpell::Read()
+{
+    _worldPacket >> Cast;
+}
+
+void WorldPackets::Spells::UseItem::Read()
+{
+    _worldPacket >> PackSlot;
+    _worldPacket >> Slot;
+    _worldPacket >> Cast.CastID;
+    _worldPacket >> Cast.SpellID;
+    _worldPacket >> CastItem;
+    _worldPacket >> Cast.Misc;
+    _worldPacket >> Cast.SendCastFlags;
+    _worldPacket >> Cast.Target;
+
+    if (Cast.SendCastFlags & CAST_FLAG_HAS_TRAJECTORY)
+    {
+        _worldPacket >> Cast.MissileTrajectory;
+        bool hasMovementData = _worldPacket.read<bool>();
+        if (hasMovementData)
+            _worldPacket >> Cast.MoveUpdate;
+    }
+
+    if (Cast.SendCastFlags & CAST_FLAG_HAS_WEIGHT)
+    {
+        uint32 weightCount = _worldPacket.read<uint32>();
+        Cast.Weight.resize(weightCount);
+
+        for (WorldPackets::Spells::SpellWeight& weight : Cast.Weight)
+        {
+            _worldPacket >> weight.Type;
+            _worldPacket >> weight.ID;
+            _worldPacket >> weight.Quantity;
+        }
+    }
+}
+
+void WorldPackets::Spells::UpdateMissileTrajectory::Read()
+{
+    _worldPacket >> FirePos.Pos.m_positionZ;
+    _worldPacket >> FirePos.Pos.m_positionX;
+    _worldPacket >> Pitch;
+    _worldPacket >> ImpactPos.Pos.m_positionX;
+    _worldPacket >> FirePos.Pos.m_positionY;
+    _worldPacket >> Speed;
+    _worldPacket >> ImpactPos.Pos.m_positionY;
+    _worldPacket >> MoveMsgID;
+    _worldPacket >> SpellID;
+    _worldPacket >> ImpactPos.Pos.m_positionZ;
+
+    Guid[5] = _worldPacket.ReadBit();
+    Guid[6] = _worldPacket.ReadBit();
+    Guid[0] = _worldPacket.ReadBit();
+    Guid[7] = _worldPacket.ReadBit();
+    Guid[1] = _worldPacket.ReadBit();
+    Guid[3] = _worldPacket.ReadBit();
+    Guid[2] = _worldPacket.ReadBit();
+    Guid[4] = _worldPacket.ReadBit();
+
+    bool hasFallData = false;
+    bool hasFallVelocity = false;
+    bool hasFacing = false;
+    bool hasTransportData = false;
+    bool hasTransportTime2 = false;
+    bool hasVehicleId = false;
+    bool hasSplineElevation = false;
+    bool hasPitch = false;
+    bool hasMoveTime = false;
+
+    // Thanks to Cataclysm's randomized packet structures we now have to read the packet like this instead of using the MovementStructures helper
+    if (_worldPacket.ReadBit())
+    {
+        Status.emplace();
+
+        Status->guid[2] = _worldPacket.ReadBit();
+        Status->heightChangeFailed = _worldPacket.ReadBit();
+        bool hasMovementFlags0 = !_worldPacket.ReadBit();
+        _worldPacket.ReadBit(); // hasSpline
+        Status->guid[4] = _worldPacket.ReadBit();
+
+        if (hasMovementFlags0)
+            Status->SetMovementFlags(_worldPacket.ReadBits(30));
+
+        Status->guid[3] = _worldPacket.ReadBit();
+        hasPitch = _worldPacket.ReadBit();
+        bool hasMovementFlags1 = _worldPacket.ReadBit();
+        hasTransportData = _worldPacket.ReadBit();
+        Status->guid[7] = _worldPacket.ReadBit();
+
+        if (hasTransportData)
+        {
+            Status->transport.guid[0] = _worldPacket.ReadBit();
+            Status->transport.guid[7] = _worldPacket.ReadBit();
+            Status->transport.guid[2] = _worldPacket.ReadBit();
+            Status->transport.guid[4] = _worldPacket.ReadBit();
+            hasVehicleId = _worldPacket.ReadBit();
+            Status->transport.guid[5] = _worldPacket.ReadBit();
+            Status->transport.guid[3] = _worldPacket.ReadBit();
+            Status->transport.guid[6] = _worldPacket.ReadBit();
+            hasTransportTime2 = _worldPacket.ReadBit();
+            Status->transport.guid[1] = _worldPacket.ReadBit();
+        }
+
+        Status->guid[6] = _worldPacket.ReadBit();
+        hasFacing = !_worldPacket.ReadBit();
+        hasMoveTime = !_worldPacket.ReadBit();
+        Status->guid[5] = _worldPacket.ReadBit();
+        hasSplineElevation = !_worldPacket.ReadBit();
+        Status->guid[1] = _worldPacket.ReadBit();
+        hasFallData = _worldPacket.ReadBit();
+        Status->guid[0] = _worldPacket.ReadBit();
+
+        if (hasFallData)
+            hasFallVelocity = _worldPacket.ReadBit();
+
+        if (hasMovementFlags1)
+            Status->SetExtraMovementFlags(_worldPacket.ReadBits(12));
+    }
+
+    _worldPacket.ReadByteSeq(Guid[2]);
+    _worldPacket.ReadByteSeq(Guid[1]);
+    _worldPacket.ReadByteSeq(Guid[3]);
+    _worldPacket.ReadByteSeq(Guid[7]);
+    _worldPacket.ReadByteSeq(Guid[6]);
+    _worldPacket.ReadByteSeq(Guid[4]);
+    _worldPacket.ReadByteSeq(Guid[0]);
+    _worldPacket.ReadByteSeq(Guid[5]);
+
+    if (Status.has_value())
+    {
+        if (hasFallData)
+        {
+            if (hasFallVelocity)
+            {
+                _worldPacket >> Status->jump.cosAngle;
+                _worldPacket >> Status->jump.sinAngle;
+                _worldPacket >> Status->jump.xyspeed;
+            }
+
+            _worldPacket >> Status->jump.zspeed;
+            _worldPacket >> Status->jump.fallTime;
+        }
+
+        if (hasFacing)
+            Status->pos.SetOrientation(_worldPacket.read<float>());
+
+        if (hasTransportData)
+        {
+            _worldPacket >> Status->transport.pos.m_positionZ;
+            _worldPacket.ReadByteSeq(Status->transport.guid[3]);
+            _worldPacket.ReadByteSeq(Status->transport.guid[7]);
+            _worldPacket >> Status->transport.pos.m_positionX;
+            Status->transport.pos.SetOrientation(_worldPacket.read<float>());
+
+            if (hasTransportTime2)
+                _worldPacket >> Status->transport.time2;
+
+            _worldPacket.ReadByteSeq(Status->transport.guid[2]);
+            _worldPacket >> Status->transport.time;
+            _worldPacket.ReadByteSeq(Status->transport.guid[0]);
+            _worldPacket >> Status->transport.pos.m_positionY;
+
+            if (hasVehicleId)
+                _worldPacket >> Status->transport.vehicleId;
+
+            _worldPacket.ReadByteSeq(Status->transport.guid[4]);
+            _worldPacket.ReadByteSeq(Status->transport.guid[6]);
+            _worldPacket.ReadByteSeq(Status->transport.guid[1]);
+            _worldPacket >> Status->transport.seat;
+            _worldPacket.ReadByteSeq(Status->transport.guid[5]);
+        }
+
+        if (hasSplineElevation)
+            _worldPacket >> Status->splineElevation;
+
+        _worldPacket.ReadByteSeq(Status->guid[4]);
+
+        if (hasPitch)
+            _worldPacket >> Status->pitch;
+
+        _worldPacket.ReadByteSeq(Status->guid[7]);
+        _worldPacket.ReadByteSeq(Status->guid[2]);
+
+        if (hasMoveTime)
+            _worldPacket >> Status->time;
+
+        _worldPacket >> Status->pos.m_positionX;
+        _worldPacket.ReadByteSeq(Status->guid[5]);
+        _worldPacket.ReadByteSeq(Status->guid[3]);
+        _worldPacket.ReadByteSeq(Status->guid[1]);
+        _worldPacket.ReadByteSeq(Status->guid[0]);
+        _worldPacket >> Status->pos.m_positionY;
+        _worldPacket >> Status->pos.m_positionZ;
+        _worldPacket.ReadByteSeq(Status->guid[6]);
+    }
+}
+
+WorldPacket const* WorldPackets::Spells::ClearCooldown::Write()
+{
+    _worldPacket << int32(SpellID);
+    _worldPacket << CasterGUID;
+
+    return &_worldPacket;
+}
+
+WorldPacket const* WorldPackets::Spells::ClearCooldowns::Write()
+{
+    _worldPacket.WriteBit(Guid[1]);
+    _worldPacket.WriteBit(Guid[3]);
+    _worldPacket.WriteBit(Guid[6]);
+    _worldPacket.WriteBits(SpellID.size(), 24);
+    _worldPacket.WriteBit(Guid[7]);
+    _worldPacket.WriteBit(Guid[5]);
+    _worldPacket.WriteBit(Guid[2]);
+    _worldPacket.WriteBit(Guid[4]);
+    _worldPacket.WriteBit(Guid[0]);
+
+    _worldPacket.WriteByteSeq(Guid[7]);
+    _worldPacket.WriteByteSeq(Guid[2]);
+    _worldPacket.WriteByteSeq(Guid[4]);
+    _worldPacket.WriteByteSeq(Guid[5]);
+    _worldPacket.WriteByteSeq(Guid[1]);
+    _worldPacket.WriteByteSeq(Guid[3]);
+
+    if (!SpellID.empty())
+        _worldPacket.append(SpellID.data(), SpellID.size());
+
+    _worldPacket.WriteByteSeq(Guid[0]);
+    _worldPacket.WriteByteSeq(Guid[6]);
 
     return &_worldPacket;
 }

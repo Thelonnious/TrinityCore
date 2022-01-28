@@ -20,6 +20,7 @@
 
 #include "Define.h"
 #include "ConditionMgr.h"
+#include "ItemEnchantmentMgr.h"
 #include "ObjectGuid.h"
 #include "RefManager.h"
 #include "SharedDefines.h"
@@ -31,6 +32,14 @@ class LootStore;
 class Player;
 struct Loot;
 struct LootStoreItem;
+
+namespace WorldPackets
+{
+    namespace Loot
+    {
+        class LootResponse;
+    }
+}
 
 enum RollType
 {
@@ -129,7 +138,7 @@ struct TC_GAME_API LootItem
 {
     uint32  itemid;
     uint32  randomSuffix;
-    int32   randomPropertyId;
+    ItemRandomEnchantmentId randomPropertyId;
     ConditionContainer conditions;                               // additional loot condition
     GuidSet allowedGUIDs;
     ObjectGuid rollWinnerGUID;                                   // Stores the guid of person who won loot, if his bags are full only he can see the item in loot list!
@@ -148,7 +157,7 @@ struct TC_GAME_API LootItem
     explicit LootItem(LootStoreItem const& li);
 
     // Empty constructor for creating an empty LootItem to be filled in with DB data
-    LootItem() : itemid(0), randomSuffix(0), randomPropertyId(0), count(0), is_looted(false), is_blocked(false),
+    LootItem() : itemid(0), randomSuffix(0), randomPropertyId(), count(0), is_looted(false), is_blocked(false),
                  freeforall(false), is_underthreshold(false), is_counted(false), needs_quest(false), is_currency(false),
                  follow_loot_rules(false)
                  { };
@@ -284,6 +293,9 @@ struct TC_GAME_API Loot
     bool hasItemForAll() const;
     bool hasItemFor(Player* player) const;
     bool hasOverThresholdItem() const;
+
+    // Builds data for SMSG_LOOT_RESPONSE
+    void BuildLootResponse(WorldPackets::Loot::LootResponse& packet, Player* viewer, PermissionTypes permission = ALL_PERMISSION) const;
 
     private:
         void FillNotNormalLootFor(Player* player, bool presentAtLooting);

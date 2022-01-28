@@ -49,7 +49,7 @@ static BossBoundaryData const boundaries =
 
 static DoorData const doorData[] =
 {
-    { GO_LEVIATHAN_DOOR,                DATA_FLAME_LEVIATHAN,         DOOR_TYPE_ROOM },
+    { GO_LEVIATHAN_DOOR,                DATA_FLAME_LEVIATHAN,   DOOR_TYPE_ROOM },
     { GO_XT_002_DOOR,                   DATA_XT002,             DOOR_TYPE_ROOM },
     { GO_IRON_COUNCIL_DOOR,             DATA_ASSEMBLY_OF_IRON,  DOOR_TYPE_ROOM },
     { GO_ARCHIVUM_DOOR,                 DATA_ASSEMBLY_OF_IRON,  DOOR_TYPE_PASSAGE },
@@ -258,8 +258,10 @@ class instance_ulduar : public InstanceMapScript
                     instance->SummonCreature(NPC_MIMIRON_YS, YSKeepersPos[3]);
             }
 
+            // This hook is being called when the instance is created for the first time without a instance save. Handle the Assembly of Iron initial spawn procedure in here.
             void Create() override
             {
+                SetBossState(DATA_ASSEMBLY_OF_IRON, NOT_STARTED);
                 instance->SpawnGroupSpawn(SPAWN_GROUP_ASSEMBLY_OF_IRON, true);
             }
 
@@ -402,7 +404,7 @@ class instance_ulduar : public InstanceMapScript
                         break;
                     case NPC_RUNE_OF_POWER:
                         if (Creature* molgeim = GetCreature(DATA_RUNEMASTER_MOLGEIM))
-                            if (molgeim->IsAIEnabled)
+                            if (molgeim->IsAIEnabled())
                                 molgeim->AI()->JustSummoned(creature);
                         break;
                     // Algalon

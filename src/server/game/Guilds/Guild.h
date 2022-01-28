@@ -39,6 +39,16 @@ enum AchievementCriteriaTypes : uint8;
 enum InventoryResult : uint8;
 enum LocaleConstant : uint8;
 
+namespace WorldPackets
+{
+    namespace Guild
+    {
+        class GuildBankLogQueryResults;
+        class GuildEventLogQueryResults;
+        class GuildNews;
+    }
+}
+
 enum GuildMisc
 {
     GUILD_BANK_MAX_TABS                 = 8,                    // send by client for money log also
@@ -266,7 +276,7 @@ enum GuildNews
 {
     GUILD_NEWS_GUILD_ACHIEVEMENT        = 0,
     GUILD_NEWS_PLAYER_ACHIEVEMENT       = 1,
-    GUILD_NEWS_DUNGEON_ENCOUNTER        = 2, // @todo Implement
+    GUILD_NEWS_DUNGEON_ENCOUNTER        = 2,
     GUILD_NEWS_ITEM_LOOTED              = 3,
     GUILD_NEWS_ITEM_CRAFTED             = 4,
     GUILD_NEWS_ITEM_PURCHASED           = 5,
@@ -397,7 +407,7 @@ private:
         uint64 GetWeekActivity() const { return m_weekActivity; }
         uint32 GetTotalReputation() const { return m_totalReputation; }
         uint32 GetWeekReputation() const { return m_weekReputation; }
-        GuildMemberProfessionData GetProfessionData(uint8 index) const { return m_professions[index]; }
+        GuildMemberProfessionData const& GetProfessionData(uint8 index) const { return m_professions[index]; }
 
         std::set<uint32> GetTrackedCriteriaIds() const { return m_trackedCriteriaIds; }
         void SetTrackedCriteriaIds(std::set<uint32> criteriaIds) { m_trackedCriteriaIds.swap(criteriaIds); }
@@ -461,7 +471,6 @@ private:
         uint64 GetTimestamp() const { return m_timestamp; }
 
         virtual void SaveToDB(CharacterDatabaseTransaction& trans) const = 0;
-        virtual void WritePacket(WorldPacket& data, ByteBuffer& content) const = 0;
 
     protected:
         ObjectGuid::LowType m_guildId;
@@ -482,7 +491,7 @@ private:
         ~EventLogEntry() { }
 
         void SaveToDB(CharacterDatabaseTransaction& trans) const override;
-        void WritePacket(WorldPacket& data, ByteBuffer& content) const override;
+        void WritePacket(WorldPackets::Guild::GuildEventLogQueryResults& packet) const;
 
     private:
         GuildEventLogTypes m_eventType;
@@ -520,7 +529,7 @@ private:
         ~BankEventLogEntry() { }
 
         void SaveToDB(CharacterDatabaseTransaction& trans) const override;
-        void WritePacket(WorldPacket& data, ByteBuffer& content) const override;
+        void WritePacket(WorldPackets::Guild:: GuildBankLogQueryResults& packet) const;
 
     private:
         GuildBankEventLogTypes m_eventType;
@@ -556,7 +565,7 @@ private:
         }
 
         void SaveToDB(CharacterDatabaseTransaction& trans) const;
-        void WritePacket(WorldPacket& data, ByteBuffer& content) const;
+        void WritePacket(WorldPackets::Guild::GuildNews& newsPacket) const;
 
     private:
         GuildNews m_type;
@@ -785,6 +794,7 @@ public:
     uint32 GetMemberCount() const { return m_members.size(); }
     time_t GetCreatedDate() const { return m_createdDate; }
     uint64 GetBankMoney() const { return m_bankMoney; }
+    uint64 GetWeeklyBonusMoney() const { return _weeklyBonusMoney; }
 
     bool SetName(std::string const& name);
 
@@ -909,6 +919,8 @@ public:
 
     void InitializeGuildChallengeRewards();
 
+    void ClearExpiredNews();
+
 protected:
     ObjectGuid::LowType m_id;
     std::string m_name;
@@ -920,6 +932,7 @@ protected:
     EmblemInfo m_emblemInfo;
     uint32 m_accountsNumber;
     uint64 m_bankMoney;
+    uint64 _weeklyBonusMoney; // Bonus money from the Cash Flow guild perk
 
     Ranks m_ranks;
     Members m_members;
@@ -988,7 +1001,7 @@ private:
     void _UpdateAccountsNumber();
     bool _IsLeader(Player* player) const;
     void _DeleteBankItems(CharacterDatabaseTransaction& trans, bool removeItemsFromDB = false);
-    bool _ModifyBankMoney(CharacterDatabaseTransaction& trans, uint64 amount, bool add);
+    bool _ModifyBankMoney(CharacterDatabaseTransaction& trans, uint64 amount, bool add, bool fromCashFlow = false);
     void _SetLeader(CharacterDatabaseTransaction& trans, Member* pLeader);
 
     void _SetRankBankMoneyPerDay(uint8 rankId, uint32 moneyPerDay);

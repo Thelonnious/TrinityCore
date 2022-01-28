@@ -108,9 +108,9 @@ void Position::GetSinCos(const float x, const float y, float &vsin, float &vcos)
 
     if (std::fabs(dx) < 0.001f && std::fabs(dy) < 0.001f)
     {
-        float angle = (float)rand_norm()*static_cast<float>(2 * M_PI);
-        vcos = std::cos(angle);
-        vsin = std::sin(angle);
+        float o = NormalizeOrientation(GetOrientation() - M_PI);
+        vcos = std::cos(o);
+        vsin = std::sin(o);
     }
     else
     {
@@ -170,11 +170,12 @@ bool Position::HasInArc(float arc, const Position* obj, float border) const
     return ((angle >= lborder) && (angle <= rborder));
 }
 
-bool Position::HasInLine(Position const* pos, float width) const
+bool Position::HasInLine(Position const* pos, float objSize, float width) const
 {
     if (!HasInArc(float(M_PI), pos))
         return false;
 
+    width += objSize;
     float angle = GetRelativeAngle(pos);
     return std::fabs(std::sin(angle)) * GetExactDist2d(pos->GetPositionX(), pos->GetPositionY()) < width;
 }

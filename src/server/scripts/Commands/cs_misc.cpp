@@ -87,7 +87,6 @@ public:
             { "kick",             rbac::RBAC_PERM_COMMAND_KICK,              true, &HandleKickPlayerCommand,       "" },
             { "linkgrave",        rbac::RBAC_PERM_COMMAND_LINKGRAVE,        false, &HandleLinkGraveCommand,        "" },
             { "listfreeze",       rbac::RBAC_PERM_COMMAND_LISTFREEZE,       false, &HandleListFreezeCommand,       "" },
-            { "maxskill",         rbac::RBAC_PERM_COMMAND_MAXSKILL,         false, &HandleMaxSkillCommand,         "" },
             { "movegens",         rbac::RBAC_PERM_COMMAND_MOVEGENS,         false, &HandleMovegensCommand,         "" },
             { "mute",             rbac::RBAC_PERM_COMMAND_MUTE,              true, &HandleMuteCommand,             "" },
             { "mutehistory",      rbac::RBAC_PERM_COMMAND_MUTEHISTORY,       true, &HandleMuteInfoCommand,         "" },
@@ -1436,22 +1435,6 @@ public:
         return true;
     }
 
-
-    static bool HandleMaxSkillCommand(ChatHandler* handler, char const* /*args*/)
-    {
-        Player* player = handler->getSelectedPlayerOrSelf();
-        if (!player)
-        {
-            handler->SendSysMessage(LANG_NO_CHAR_SELECTED);
-            handler->SetSentErrorMessage(true);
-            return false;
-        }
-
-        // each skills that have max skill value dependent from level seted to current level max skill value
-        player->UpdateWeaponsSkillsToMaxSkillsForLevel();
-        return true;
-    }
-
     static bool HandleSetSkillCommand(ChatHandler* handler, char const* args)
     {
         // number or [name] Shift-click form |color|Hskill:skill_id|h[name]|h|r
@@ -1915,12 +1898,12 @@ public:
         Cell::VisitGridObjects(player, worker, player->GetGridActivationRange());
 
         // Now handle any that had despawned, but had respawn time logged.
-        std::vector<RespawnInfo*> data;
+        std::vector<RespawnInfo const*> data;
         player->GetMap()->GetRespawnInfo(data, SPAWN_TYPEMASK_ALL);
         if (!data.empty())
         {
             uint32 const gridId = Trinity::ComputeGridCoord(player->GetPositionX(), player->GetPositionY()).GetId();
-            for (RespawnInfo* info : data)
+            for (RespawnInfo const* info : data)
                 if (info->gridId == gridId)
                     player->GetMap()->Respawn(info->type, info->spawnId);
         }

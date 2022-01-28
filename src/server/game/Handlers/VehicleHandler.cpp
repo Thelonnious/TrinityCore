@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "Creature.h"
 #include "DBCStructure.h"
 #include "Log.h"
 #include "Map.h"
@@ -29,7 +30,7 @@ void WorldSession::HandleDismissControlledVehicle(WorldPacket &recvData)
 {
     TC_LOG_DEBUG("network", "WORLD: Recvd CMSG_DISMISS_CONTROLLED_VEHICLE");
 
-    ObjectGuid vehicleGUID = _player->GetCharmGUID();
+    ObjectGuid vehicleGUID = _player->GetCharmedGUID();
 
     if (!vehicleGUID)                                       // something wrong here...
     {
@@ -37,10 +38,15 @@ void WorldSession::HandleDismissControlledVehicle(WorldPacket &recvData)
         return;
     }
 
-    MovementInfo mi;
-    _player->ReadMovementInfo(recvData, &mi);
+    MovementInfo movementInfo;
+    _player->ReadMovementInfo(recvData, &movementInfo);
 
-    _player->m_movementInfo = mi;
+    if (movementInfo.guid != vehicleGUID)
+    {
+        TC_LOG_ERROR("network", "Player %s tried to dismiss a controlled vehicle (%s) that he has no control over. Possible cheater or malformed packet.",
+            GetPlayer()->GetGUID().ToString().c_str(), movementInfo.guid.ToString().c_str());
+        return;
+    }
 
     _player->ExitVehicle();
 }
@@ -208,7 +214,12 @@ void WorldSession::HandleRequestVehicleExit(WorldPacket& /*recvData*/)
         if (VehicleSeatEntry const* seat = vehicle->GetSeatForPassenger(GetPlayer()))
         {
             if (seat->CanEnterOrExit())
+            {
                 GetPlayer()->ExitVehicle();
+                if (Creature* creature = vehicle->GetBase()->ToCreature())
+                    if (creature->IsFlying())
+                        GetPlayer()->CastSpell(GetPlayer(), VEHICLE_SPELL_PARACHUTE);
+            }
             else
                 TC_LOG_ERROR("network", "Player %u tried to exit vehicle, but seatflags %u (ID: %u) don't permit that.",
                 GetPlayer()->GetGUID().GetCounter(), seat->ID, seat->Flags);

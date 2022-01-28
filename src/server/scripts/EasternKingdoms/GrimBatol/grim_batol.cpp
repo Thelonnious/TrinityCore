@@ -104,13 +104,13 @@ struct npc_grim_batol_twilight_beguiler : public ScriptedAI
                         Position pos = gronn->GetHomePosition();
                         pos.SetOrientation(pos.GetOrientation() + (float)M_PI / 1.5f);
 
-                        if (pos.HasInLine(&me->GetHomePosition(), 15.0f))
+                        if (pos.HasInLine(&me->GetHomePosition(), 15.0f, 0.f))
                             DoCastSelf(SPELL_ENSLAVE_GRONN_COSMETIC_LEFT);
                         else
                         {
                             pos = gronn->GetHomePosition();
                             pos.SetOrientation(pos.GetOrientation() - (float)M_PI / 1.5f);
-                            if (pos.HasInLine(&me->GetHomePosition(), 15.0f))
+                            if (pos.HasInLine(&me->GetHomePosition(), 15.0f, 0.f))
                                 DoCastSelf(SPELL_ENSLAVE_GRONN_COSMETIC_RIGHT);
                         }
                     }
@@ -221,17 +221,13 @@ struct npc_grim_batol_battered_red_drake: public VehicleAI
             me->PlayOneShotAnimKitId(ANIM_KIT_ID_LIFTOFF);
             me->SetAnimationTier(AnimationTier::Fly);
 
-            player->SetMover(me);
             _playerGuid = player->GetGUID();
 
             _events.ScheduleEvent(EVENT_SET_HOVERING, 2s);
             _events.ScheduleEvent(EVENT_PREPARE_BOMBARDMENT, 1s);
         }
         else
-        {
-            player->SetMover(player);
             me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
-        }
     }
 
     void UpdateAI(uint32 diff) override

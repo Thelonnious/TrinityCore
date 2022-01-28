@@ -31,6 +31,7 @@
 #include "Timer.h"
 
 class Creature;
+struct WaypointNode;
 struct WaypointPath;
 
 template<class T>
@@ -54,23 +55,23 @@ class WaypointMovementGenerator<Creature> : public MovementGeneratorMedium<Creat
         void UnitSpeedChanged() override { _recalculateSpeed = true; }
         void Pause(uint32 timer = 0) override;
         void Resume(uint32 overrideTimer = 0) override;
-
-        void MovementInform(Creature*);
-
-        bool GetResetPos(Creature*, float& x, float& y, float& z);
+        bool GetResetPosition(Unit*, float& x, float& y, float& z) override;
 
     private:
-        void OnArrived(Creature*);
+        void ProcessWaypointArrival(Creature*, WaypointNode const&);
         void StartMove(Creature*, bool relaunch = false);
-        static bool CanMove(Creature*);
+        bool IsAllowedToMove(Creature*);
 
-        TimeTrackerSmall _nextMoveTime;
-        bool _recalculateSpeed;
-        bool _isArrivalDone;
+        uint32 _lastSplineId;
         uint32 _pathId;
+        int32 _waypointDelay;
+        int32 _pauseTime;
+        bool _waypointReached;
+        bool _recalculateSpeed;
         bool _repeating;
         bool _loadedFromDB;
         bool _stalled;
+        bool _hasBeenStalled;
         bool _done;
 };
 

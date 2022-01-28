@@ -46,6 +46,12 @@ void UnitAI::InitializeAI()
         Reset();
 }
 
+void UnitAI::OnCharmed(bool isNew)
+{
+    if (!isNew)
+        me->ScheduleAIChange();
+}
+
 void UnitAI::AttackStartCaster(Unit* victim, float dist)
 {
     if (victim && me->Attack(victim, false))
@@ -65,21 +71,13 @@ void UnitAI::DoMeleeAttackIfReady()
     //Make sure our attack is ready and we aren't currently casting before checking distance
     if (me->isAttackReady())
     {
-        if (ShouldSparWith(victim))
-            me->FakeAttackerStateUpdate(victim);
-        else
-            me->AttackerStateUpdate(victim);
-
+        me->AttackerStateUpdate(victim);
         me->resetAttackTimer();
     }
 
     if (me->haveOffhandWeapon() && me->isAttackReady(OFF_ATTACK))
     {
-        if (ShouldSparWith(victim))
-            me->FakeAttackerStateUpdate(victim, OFF_ATTACK);
-        else
-            me->AttackerStateUpdate(victim, OFF_ATTACK);
-
+        me->AttackerStateUpdate(victim, OFF_ATTACK);
         me->resetAttackTimer(OFF_ATTACK);
     }
 }
@@ -154,8 +152,7 @@ void UnitAI::DoCast(uint32 spellId)
                 float range = spellInfo->GetMaxRange(false);
 
                 DefaultTargetSelector targetSelector(me, range, playerOnly, true, -(int32)spellId);
-                if (!(spellInfo->AuraInterruptFlags & AURA_INTERRUPT_FLAG_NOT_VICTIM)
-                    && targetSelector(me->GetVictim()))
+                if (!spellInfo->HasAuraInterruptFlag(SpellAuraInterruptFlags::NOT_VICTIM) && targetSelector(me->GetVictim()))
                     target = me->GetVictim();
                 else
                     target = SelectTarget(SELECT_TARGET_RANDOM, 0, targetSelector);

@@ -1212,7 +1212,7 @@ struct npc_argent_captainAI : public ScriptedAI
             {
                 me->GetMotionMaster()->Clear(false);
                 if (Creature* crok = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_CROK_SCOURGEBANE)))
-                    me->GetMotionMaster()->MoveFollow(crok, FollowDist, FollowAngle, MOTION_SLOT_IDLE);
+                    me->GetMotionMaster()->MoveFollow(crok, FollowDist, FollowAngle, true, true);
             }
 
             Reset();
@@ -1331,8 +1331,8 @@ class npc_captain_arnath : public CreatureScript
             Creature* FindFriendlyCreature() const
             {
                 Creature* target = nullptr;
-                Trinity::MostHPMissingInRange u_check(me, 60.0f, 0);
-                Trinity::CreatureLastSearcher<Trinity::MostHPMissingInRange> searcher(me, target, u_check);
+                Trinity::FriendlyMostHPMissingInRange u_check(me, 60.0f, 0);
+                Trinity::CreatureLastSearcher<Trinity::FriendlyMostHPMissingInRange> searcher(me, target, u_check);
                 Cell::VisitGridObjects(me, searcher, 60.0f);
                 return target;
             }

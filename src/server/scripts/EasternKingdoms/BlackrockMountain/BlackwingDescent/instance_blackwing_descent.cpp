@@ -131,7 +131,6 @@ class instance_blackwing_descent : public InstanceMapScript
                 _deadDwarfSpiritsLeft = 0;
                 _deadDwarfSpiritsRight = 0;
                 _atramedesIntroState = NOT_STARTED;
-                _nefarianAchievementEligible = true;
                 _nefariansEndIntroDone = false;
             }
 
@@ -245,7 +244,7 @@ class instance_blackwing_descent : public InstanceMapScript
 
                             if (state == DONE)
                                 if (Creature* nefarius = GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC))
-                                    if (nefarius->IsAIEnabled)
+                                    if (nefarius->IsAIEnabled())
                                         nefarius->AI()->SetData(DATA_BOSS_DEFEATED, type);
 
                             _roomStalkerGUIDs.clear();
@@ -256,7 +255,7 @@ class instance_blackwing_descent : public InstanceMapScript
                     case DATA_MALORIAK:
                         if (state == DONE)
                             if (Creature* nefarius = GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC))
-                                if (nefarius->IsAIEnabled)
+                                if (nefarius->IsAIEnabled())
                                     nefarius->AI()->SetData(DATA_BOSS_DEFEATED, type);
                         break;
                     case DATA_ATRAMEDES:
@@ -269,7 +268,7 @@ class instance_blackwing_descent : public InstanceMapScript
                         {
                             instance->SpawnGroupDespawn(SPAWN_GROUP_ANCIENT_DWARVEN_SHIELDS, false);
                             if (Creature* nefarius = GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC))
-                                if (nefarius->IsAIEnabled)
+                                if (nefarius->IsAIEnabled())
                                     nefarius->AI()->SetData(DATA_BOSS_DEFEATED, type);
                         }
                         break;
@@ -343,7 +342,7 @@ class instance_blackwing_descent : public InstanceMapScript
                                 atramedes->SetReactState(REACT_PASSIVE);
                                 atramedes->SendSetPlayHoverAnim(true);
 
-                                if (atramedes->IsAIEnabled)
+                                if (atramedes->IsAIEnabled())
                                     atramedes->AI()->DoAction(ACTION_START_ATRAMEDES_INTRO);
                             }
                         }
@@ -356,14 +355,10 @@ class instance_blackwing_descent : public InstanceMapScript
                         else
                             nefarius = GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC);
 
-                        if (nefarius && nefarius->IsAIEnabled)
+                        if (nefarius && nefarius->IsAIEnabled())
                             nefarius->AI()->SetData(DATA_HEROES_ENTERED_HALLS, DONE);
                         break;
                     }
-                    case DATA_NEFARIAN_ACHIEVEMENT_STATE:
-                        _nefarianAchievementEligible = uint8(data);
-                        DoUpdateWorldState(WS_KEEPING_IT_IN_THE_FAMILY, uint8(_nefarianAchievementEligible));
-                        break;
                     case DATA_NEFARIANS_END_INTRO_DONE:
                         _nefariansEndIntroDone = uint8(data);
                         break;
@@ -375,19 +370,12 @@ class instance_blackwing_descent : public InstanceMapScript
                 }
             }
 
-            void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& data) override
-            {
-                data.Worldstates.emplace_back(uint32(WS_KEEPING_IT_IN_THE_FAMILY), uint32(_nefarianAchievementEligible));
-            }
-
             uint32 GetData(uint32 type) const override
             {
                 switch (type)
                 {
                     case DATA_ATRAMEDES_INTRO:
                         return _atramedesIntroState;
-                    case DATA_NEFARIAN_ACHIEVEMENT_STATE:
-                        return uint8(_nefarianAchievementEligible);
                     case DATA_NEFARIANS_END_INTRO_DONE:
                         return uint8(_nefariansEndIntroDone);
                 }
@@ -528,7 +516,6 @@ class instance_blackwing_descent : public InstanceMapScript
             uint8 _deadDwarfSpiritsLeft;
             uint8 _deadDwarfSpiritsRight;
             uint8 _atramedesIntroState;
-            bool _nefarianAchievementEligible;
             bool _nefariansEndIntroDone;
 
             bool IsNefarianAvailable() const

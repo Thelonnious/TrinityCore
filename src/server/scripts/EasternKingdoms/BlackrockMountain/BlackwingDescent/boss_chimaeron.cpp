@@ -125,11 +125,6 @@ enum GossipMenuMisc
     NPC_TEXT_MISSING_KEY        = 16565
 };
 
-enum Data
-{
-    DATA_ACHIEVEMENT_ENLIGIBLE = 0
-};
-
 Position const LordVictorNefariusSummonPosition = { -113.8229f, 45.86111f, 80.36481f, 4.817109f };
 
 struct boss_chimaeron : public BossAI
@@ -155,6 +150,7 @@ struct boss_chimaeron : public BossAI
     {
         BossAI::JustEngagedWith(who);
         instance->SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, me);
+        instance->instance->SetWorldState(WORLD_STATE_ID_FULL_OF_SOUND_AND_FURY, 0);
         me->SetReactState(REACT_AGGRESSIVE);
         events.SetPhase(PHASE_1);
         events.ScheduleEvent(EVENT_CAUSTIC_SLIME, 5s, 0, PHASE_1);
@@ -166,7 +162,7 @@ struct boss_chimaeron : public BossAI
             DoSummon(NPC_LORD_VICTOR_NEFARIUS_GENERIC, LordVictorNefariusSummonPosition, 0, TEMPSUMMON_MANUAL_DESPAWN);
 
         if (Creature * finkle = instance->GetCreature(DATA_FINKLE_EINHORN))
-            if (finkle->IsAIEnabled)
+            if (finkle->IsAIEnabled())
                 finkle->AI()->DoAction(ACTION_ENCOUNTER_STARTED);
     }
 
@@ -196,16 +192,16 @@ struct boss_chimaeron : public BossAI
         me->RemoveAllAuras();
 
         if (Creature* bileOTron = instance->GetCreature(DATA_BILE_O_TRON_800))
-            if (bileOTron->IsAIEnabled)
+            if (bileOTron->IsAIEnabled())
                 bileOTron->AI()->DoAction(ACTION_SHUT_DOWN);
 
         if (Creature* finkle = instance->GetCreature(DATA_FINKLE_EINHORN))
-            if (finkle->IsAIEnabled)
+            if (finkle->IsAIEnabled())
                 finkle->AI()->DoAction(ACTION_CHIMAERON_DIED);
 
         if (IsHeroic())
             if (Creature* nefarius = instance->GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC))
-                if (nefarius->IsAIEnabled)
+                if (nefarius->IsAIEnabled())
                     nefarius->AI()->DoAction(ACTION_CHIMAERON_DEFEATED);
                 
     }
@@ -213,7 +209,11 @@ struct boss_chimaeron : public BossAI
     void KilledUnit(Unit* victim) override
     {
         if (victim->GetTypeId() == TYPEID_PLAYER)
+        {
             _killedPlayerCount++;
+            if (_killedPlayerCount == 3)
+                instance->instance->SetWorldState(WORLD_STATE_ID_FULL_OF_SOUND_AND_FURY, 1);
+        }
     }
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage) override
@@ -230,7 +230,7 @@ struct boss_chimaeron : public BossAI
 
             if (IsHeroic())
                 if (Creature* nefarius = instance->GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC))
-                    if (nefarius->IsAIEnabled)
+                    if (nefarius->IsAIEnabled())
                         nefarius->AI()->DoAction(ACTION_ENTER_PHASE_2);
         }
     }
@@ -259,11 +259,11 @@ struct boss_chimaeron : public BossAI
 
                 if (roll_chance_i(_knockOutChance))
                 {
-                    if (bileOTron->IsAIEnabled)
+                    if (bileOTron->IsAIEnabled())
                         bileOTron->AI()->DoAction(ACTION_KNOCK_OUT_BILE_O_TRON);
 
                     if (Creature* finkle = instance->GetCreature(DATA_FINKLE_EINHORN))
-                        if (finkle->IsAIEnabled)
+                        if (finkle->IsAIEnabled())
                             finkle->AI()->Talk(SAY_BILE_O_TRON_KNOCKED_OUT, me);
 
                     me->StopMoving();
@@ -290,7 +290,7 @@ struct boss_chimaeron : public BossAI
                 _isInFeud = true;
                 if (IsHeroic())
                     if (Creature* nefarius = instance->GetCreature(DATA_LORD_VICTOR_NEFARIUS_GENERIC))
-                        if (nefarius->IsAIEnabled)
+                        if (nefarius->IsAIEnabled())
                             nefarius->AI()->DoAction(ACTION_STOP_FEUD);
                 break;
             case ACTION_END_FEUD:
@@ -311,19 +311,6 @@ struct boss_chimaeron : public BossAI
                 summons.Summon(summon);
                 break;
         }
-    }
-
-    uint32 GetData(uint32 type) const override
-    {
-        switch (type)
-        {
-            case DATA_ACHIEVEMENT_ENLIGIBLE:
-                return uint8(_killedPlayerCount <= 2);
-            default:
-                return 0;
-        }
-
-        return 0;
     }
 
     void UpdateAI(uint32 diff) override
@@ -399,7 +386,7 @@ struct npc_chimaeron_finkle_einhorn : public ScriptedAI
         {
             _events.Reset();
             if (Creature* bileOTron = _instance->GetCreature(DATA_BILE_O_TRON_800))
-                if (bileOTron->IsAIEnabled)
+                if (bileOTron->IsAIEnabled())
                     bileOTron->AI()->DoAction(ACTION_ACTIVATE_BILE_O_TRON);
 
             if (Creature* chimaeron = _instance->GetCreature(DATA_CHIMAERON))
@@ -651,7 +638,7 @@ class spell_chimaeron_reroute_power : public AuraScript
     void HandleActivation(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Creature* target = GetTarget()->ToCreature())
-            if (target->IsAIEnabled)
+            if (target->IsAIEnabled())
                 target->AI()->DoAction(ACTION_BILE_O_TRON_BACK_ONLINE);
     }
 
@@ -666,14 +653,14 @@ class spell_chimaeron_feud : public AuraScript
     void HandleApply(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Creature* target = GetTarget()->ToCreature())
-            if (target->IsAIEnabled)
+            if (target->IsAIEnabled())
                 target->AI()->DoAction(ACTION_START_FEUD);
     }
 
     void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Creature* target = GetTarget()->ToCreature())
-            if (target->IsAIEnabled)
+            if (target->IsAIEnabled())
                 target->AI()->DoAction(ACTION_END_FEUD);
     }
 
@@ -697,23 +684,6 @@ class spell_chimaeron_shadow_whip : public SpellScript
     }
 };
 
-class achievement_full_of_sound_and_fury : public AchievementCriteriaScript
-{
-    public:
-        achievement_full_of_sound_and_fury() : AchievementCriteriaScript("achievement_full_of_sound_and_fury") { }
-
-        bool OnCheck(Player* /*source*/, Unit* target) override
-        {
-            if (!target)
-                return false;
-
-            if (target->IsAIEnabled)
-                return target->GetAI()->GetData(DATA_ACHIEVEMENT_ENLIGIBLE);
-
-            return false;
-        }
-};
-
 void AddSC_boss_chimaeron()
 {
     RegisterBlackwingDescentCreatureAI(boss_chimaeron);
@@ -726,5 +696,4 @@ void AddSC_boss_chimaeron()
     RegisterSpellScript(spell_chimaeron_reroute_power);
     RegisterSpellScript(spell_chimaeron_feud);
     RegisterSpellScript(spell_chimaeron_shadow_whip);
-    new achievement_full_of_sound_and_fury();
 }

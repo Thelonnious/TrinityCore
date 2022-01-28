@@ -23,6 +23,7 @@
 #include "GameObjectData.h"
 #include "DB2Stores.h"
 #include "ObjectGuid.h"
+#include "Optional.h"
 #include "QuestDef.h"
 #include "SharedDefines.h"
 
@@ -45,20 +46,20 @@ namespace WorldPackets
 
         struct CreatureStats
         {
-            std::array<std::string, 4> Name;
-            std::array<std::string, 4> NameAlt;
+            std::array<std::string, 4> Name = {};
+            std::array<std::string, 4> NameAlt = {};
             std::string Title;
             std::string CursorName;
-            std::array<uint32, 2> Flags;
+            std::array<uint32, 2> Flags = {};
             uint32 CreatureType = 0;
             uint32 CreatureFamily = 0;
             uint32 Classification = 0;
-            std::array<uint32, MAX_KILL_CREDIT> ProxyCreatureID;
-            std::array<uint32, MAX_CREATURE_MODELS> CreatureDisplayID;
+            std::array<uint32, MAX_KILL_CREDIT> ProxyCreatureID = {};
+            std::array<uint32, MAX_CREATURE_MODELS> CreatureDisplayID = {};
             float HpMulti = 0.0f;
             float EnergyMulti = 0.0f;
             bool Leader = false;
-            std::array<uint32, MAX_CREATURE_QUEST_ITEMS> QuestItems;
+            std::array<uint32, MAX_CREATURE_QUEST_ITEMS> QuestItems = {};
             uint32 CreatureMovementInfoID = 0;
             uint32 RequiredExpansion = 0;
         };
@@ -88,15 +89,15 @@ namespace WorldPackets
 
         struct GameObjectStats
         {
-            std::array<std::string, 4> Name;
+            std::array<std::string, 4> Name = {};
             std::string IconName;
             std::string CastBarCaption;
             std::string UnkString;
             uint32 Type = 0;
             uint32 DisplayID = 0;
-            std::array<uint32, MAX_GAMEOBJECT_DATA> Data;
+            std::array<uint32, MAX_GAMEOBJECT_DATA> Data = {};
             float Size = 0.0f;
-            std::array<uint32, MAX_GAMEOBJECT_QUEST_ITEMS> QuestItems;
+            std::array<uint32, MAX_GAMEOBJECT_QUEST_ITEMS> QuestItems = {};
             int32 RequiredLevel = 0;
         };
 
@@ -120,7 +121,7 @@ namespace WorldPackets
             void Read() override;
 
             uint32 MissingQuestCount = 0;
-            std::array<uint32, MAX_QUEST_LOG_SIZE> MissingQuestPOIs;
+            std::array<uint32, MAX_QUEST_LOG_SIZE> MissingQuestPOIs = {};
         };
 
         struct DBQueryRecord
@@ -168,10 +169,24 @@ namespace WorldPackets
             bool Initialize(ObjectGuid const& guid, Player const* player = nullptr);
 
             std::string Name;
+            std::string RealmName;
             uint8 Race = RACE_NONE;
             uint8 Sex = GENDER_NONE;
             uint8 ClassID = CLASS_NONE;
             uint8 Level = 0;
+            Optional<DeclinedName> DeclinedNames;
+        };
+
+        class QueryPlayerNameResponse final : public ServerPacket
+        {
+        public:
+            QueryPlayerNameResponse() : ServerPacket(SMSG_QUERY_PLAYER_NAME_RESPONSE, 8+1+1+1+1+1+10) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid Player;
+            uint8 Result = 0; // 0 - full packet, != 0 - only guid
+            PlayerGuidLookupData Data;
         };
     }
 }

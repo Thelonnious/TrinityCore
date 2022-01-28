@@ -16,6 +16,7 @@
  */
 
 #include "WorldSession.h"
+#include "ArchaeologyPackets.h"
 #include "AccountMgr.h"
 #include "AchievementMgr.h"
 #include "Battlefield.h"
@@ -38,6 +39,7 @@
 #include "Group.h"
 #include "Guild.h"
 #include "GuildMgr.h"
+#include "InspectPackets.h"
 #include "InstanceScript.h"
 #include "Language.h"
 #include "Log.h"
@@ -259,7 +261,7 @@ void WorldSession::HandleWhoOpcode(WorldPackets::Who::WhoRequestPkt& whoRequest)
 
         if (!whoRequest.Request.Areas.empty())
         {
-            if (std::find(whoRequest.Request.Areas.begin(), whoRequest.Request.Areas.end(), target.GetZoneId()) == whoRequest.Request.Areas.end())
+            if (std::find(whoRequest.Request.Areas.begin(), whoRequest.Request.Areas.end(), int32(target.GetZoneId())) == whoRequest.Request.Areas.end())
                 continue;
         }
 
@@ -474,14 +476,14 @@ void WorldSession::HandleRequestCemeteryList(WorldPacket& /*recvPacket*/)
         return;
     }
 
-    WorldPacket data(SMSG_REQUEST_CEMETERY_LIST_RESPONSE, 4 + 4 * graveyardIds.size());
-    data.WriteBit(0); // Is MicroDungeon (WorldMapFrame.lua)
+    WorldPackets::Misc::RequestCemeteryListResponse packet;
+    packet.IsGossipTriggered = false;
+    packet.CemeteryID.reserve(graveyardIds.size());
 
-    data.WriteBits(graveyardIds.size(), 24);
     for (uint32 id : graveyardIds)
-        data << id;
+        packet.CemeteryID.push_back(id);
 
-    SendPacket(&data);
+    SendPacket(packet.Write());
 }
 
 void WorldSession::HandleSetSelectionOpcode(WorldPacket& recvData)
@@ -718,11 +720,8 @@ void WorldSession::HandleAreaTriggerOpcode(WorldPacket& recvData)
                     break;
                 case Map::CANNOT_ENTER_NOT_IN_RAID:
                 {
-                    WorldPacket data(SMSG_RAID_GROUP_ONLY, 4 + 4);
-                    data << uint32(0);
-                    data << uint32(2); // You must be in a raid group to enter this instance.
-                    player->SendDirectMessage(&data);
                     TC_LOG_DEBUG("maps", "MAP: Player '%s' must be in a raid group to enter instance map %d", player->GetName().c_str(), at->target_mapId);
+                    player->SendRaidGroupOnlyMessage(RAID_GROUP_ERR_ONLY, 0);
                     reviveAtTrigger = true;
                     break;
                 }
@@ -913,64 +912,6 @@ void WorldSession::HandleNextCinematicCamera(WorldPackets::Misc::NextCinematicCa
     GetPlayer()->GetCinematicMgr()->BeginCinematic();
 }
 
-void WorldSession::HandleFeatherFallAck(WorldPacket& recvData)
-{
-    TC_LOG_DEBUG("network", "WORLD: CMSG_MOVE_FEATHER_FALL_ACK");
-
-    // no used
-    recvData.rfinish();                       // prevent warnings spam
-}
-
-void WorldSession::HandleMoveUnRootAck(WorldPacket& recvData)
-{
-    // no used
-    recvData.rfinish();                       // prevent warnings spam
-/*
-    uint64 guid;
-    recvData >> guid;
-
-    // now can skip not our packet
-    if (_player->GetGUID() != guid)
-    {
-        recvData.rfinish();                   // prevent warnings spam
-        return;
-    }
-
-    TC_LOG_DEBUG("network", "WORLD: CMSG_FORCE_MOVE_UNROOT_ACK");
-
-    recvData.read_skip<uint32>();                          // unk
-
-    MovementInfo movementInfo;
-    movementInfo.guid = guid;
-    ReadMovementInfo(recvData, &movementInfo);
-    recvData.read_skip<float>();                           // unk2
-*/
-}
-
-void WorldSession::HandleMoveRootAck(WorldPacket& recvData)
-{
-    // no used
-    recvData.rfinish();                       // prevent warnings spam
-/*
-    uint64 guid;
-    recvData >> guid;
-
-    // now can skip not our packet
-    if (_player->GetGUID() != guid)
-    {
-        recvData.rfinish();                   // prevent warnings spam
-        return;
-    }
-
-    TC_LOG_DEBUG("network", "WORLD: CMSG_FORCE_MOVE_ROOT_ACK");
-
-    recvData.read_skip<uint32>();                          // unk
-
-    MovementInfo movementInfo;
-    ReadMovementInfo(recvData, &movementInfo);
-*/
-}
-
 void WorldSession::HandleSetActionBarToggles(WorldPacket& recvData)
 {
     uint8 actionBar;
@@ -988,13 +929,13 @@ void WorldSession::HandleSetActionBarToggles(WorldPacket& recvData)
 
 void WorldSession::HandlePlayedTime(WorldPacket& recvData)
 {
-    uint8 unk1;
-    recvData >> unk1;                                      // 0 or 1 expected
+    uint8 TriggerScriptEvent;
+    recvData >> TriggerScriptEvent; // 0 or 1 expected
 
     WorldPackets::Character::PlayedTime packet;
     packet.TotalTime = _player->GetTotalPlayedTime();
     packet.LevelTime = _player->GetLevelPlayedTime();
-    packet.TriggerEvent = bool(unk1); // 0 - will not show in chat frame
+    packet.TriggerEvent = bool(TriggerScriptEvent); // 0 - will not show in chat frame
     SendPacket(packet.Write());
 }
 
@@ -1039,64 +980,6 @@ void WorldSession::HandleInspectOpcode(WorldPacket& recvData)
         data << uint64(guild->GetExperience());
         data << uint32(guild->GetMembersCount());
     }
-    SendPacket(&data);
-}
-
-void WorldSession::HandleInspectHonorStatsOpcode(WorldPacket& recvData)
-{
-    ObjectGuid guid;
-    guid[1] = recvData.ReadBit();
-    guid[5] = recvData.ReadBit();
-    guid[7] = recvData.ReadBit();
-    guid[3] = recvData.ReadBit();
-    guid[2] = recvData.ReadBit();
-    guid[4] = recvData.ReadBit();
-    guid[0] = recvData.ReadBit();
-    guid[6] = recvData.ReadBit();
-
-    recvData.ReadByteSeq(guid[4]);
-    recvData.ReadByteSeq(guid[7]);
-    recvData.ReadByteSeq(guid[0]);
-    recvData.ReadByteSeq(guid[5]);
-    recvData.ReadByteSeq(guid[1]);
-    recvData.ReadByteSeq(guid[6]);
-    recvData.ReadByteSeq(guid[2]);
-    recvData.ReadByteSeq(guid[3]);
-    Player* player = ObjectAccessor::GetPlayer(*_player, guid);
-    if (!player)
-    {
-        TC_LOG_DEBUG("network", "CMSG_INSPECT_HONOR_STATS: No player found from %s", guid.ToString().c_str());
-        return;
-    }
-
-    if (!GetPlayer()->IsWithinDistInMap(player, INSPECT_DISTANCE, false))
-        return;
-
-    if (GetPlayer()->IsValidAttackTarget(player))
-        return;
-
-    ObjectGuid playerGuid = player->GetGUID();
-    WorldPacket data(SMSG_INSPECT_HONOR_STATS, 8+1+4+4);
-    data.WriteBit(playerGuid[4]);
-    data.WriteBit(playerGuid[3]);
-    data.WriteBit(playerGuid[6]);
-    data.WriteBit(playerGuid[2]);
-    data.WriteBit(playerGuid[5]);
-    data.WriteBit(playerGuid[0]);
-    data.WriteBit(playerGuid[7]);
-    data.WriteBit(playerGuid[1]);
-    data << uint8(0);                                               // rank
-    data << uint16(player->GetUInt16Value(PLAYER_FIELD_KILLS, 1));  // yesterday kills
-    data << uint16(player->GetUInt16Value(PLAYER_FIELD_KILLS, 0));  // today kills
-    data.WriteByteSeq(playerGuid[2]);
-    data.WriteByteSeq(playerGuid[0]);
-    data.WriteByteSeq(playerGuid[6]);
-    data.WriteByteSeq(playerGuid[3]);
-    data.WriteByteSeq(playerGuid[4]);
-    data.WriteByteSeq(playerGuid[1]);
-    data.WriteByteSeq(playerGuid[5]);
-    data << uint32(player->GetUInt32Value(PLAYER_FIELD_LIFETIME_HONORABLE_KILLS));
-    data.WriteByteSeq(playerGuid[7]);
     SendPacket(&data);
 }
 
@@ -1449,17 +1332,6 @@ void WorldSession::HandleCancelMountAuraOpcode(WorldPacket& /*recvData*/)
     _player->RemoveAurasByType(SPELL_AURA_MOUNTED); // Calls Dismount()
 }
 
-void WorldSession::HandleMoveSetCanFlyAckOpcode(WorldPacket& recvData)
-{
-    // fly mode on/off
-    TC_LOG_DEBUG("network", "WORLD: CMSG_MOVE_SET_CAN_FLY_ACK");
-
-    MovementInfo movementInfo;
-    _player->ReadMovementInfo(recvData, &movementInfo);
-
-    _player->m_unitMovedByMe->m_movementInfo.flags = movementInfo.GetMovementFlags();
-}
-
 void WorldSession::HandleSetTaxiBenchmarkOpcode(WorldPacket& recvData)
 {
     TC_LOG_DEBUG("network", "WORLD: CMSG_SET_TAXI_BENCHMARK_MODE");
@@ -1603,50 +1475,6 @@ void WorldSession::HandleInstanceLockResponse(WorldPacket& recvPacket)
         _player->RepopAtGraveyard();
 
     _player->SetPendingBind(0, 0);
-}
-
-void WorldSession::HandleUpdateMissileTrajectory(WorldPacket& recvPacket)
-{
-    TC_LOG_DEBUG("network", "WORLD: CMSG_UPDATE_MISSILE_TRAJECTORY");
-
-    ObjectGuid guid;
-    uint32 spellId;
-    float elevation, speed;
-    float curX, curY, curZ;
-    float targetX, targetY, targetZ;
-    uint8 moveStop;
-
-    recvPacket >> guid >> spellId >> elevation >> speed;
-    recvPacket >> curX >> curY >> curZ;
-    recvPacket >> targetX >> targetY >> targetZ;
-    recvPacket >> moveStop;
-
-    Unit* caster = ObjectAccessor::GetUnit(*_player, guid);
-    Spell* spell = caster ? caster->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
-    if (!spell || spell->m_spellInfo->Id != spellId || !spell->m_targets.HasDst() || !spell->m_targets.HasSrc())
-    {
-        recvPacket.rfinish();
-        return;
-    }
-
-    Position pos = *spell->m_targets.GetSrcPos();
-    pos.Relocate(curX, curY, curZ);
-    spell->m_targets.ModSrc(pos);
-
-    pos = *spell->m_targets.GetDstPos();
-    pos.Relocate(targetX, targetY, targetZ);
-    spell->m_targets.ModDst(pos);
-
-    spell->m_targets.SetElevation(elevation);
-    spell->m_targets.SetSpeed(speed);
-
-    if (moveStop)
-    {
-        uint32 opcode;
-        recvPacket >> opcode;
-        recvPacket.SetOpcode(MSG_MOVE_STOP); // always set to MSG_MOVE_STOP in client SetOpcode
-        HandleMovementOpcodes(recvPacket);
-    }
 }
 
 void WorldSession::HandleViolenceLevel(WorldPacket& recvPacket)
@@ -1836,10 +1664,9 @@ void WorldSession::SendStreamingMovie()
     SendPacket(packet.Write());
 }
 
-void WorldSession::HandleRequestResearchHistory(WorldPacket & /*recv_data*/)
+void WorldSession::HandleRequestResearchHistory(WorldPackets::Archaeology::RequestResearchHistory& /*packet*/)
 {
-    if (Player* player = GetPlayer())
-        player->NotifyRequestResearchHistory();
+    _player->NotifyRequestResearchHistory();
 }
 
 void WorldSession::HandleOpeningCinematic(WorldPackets::Misc::OpeningCinematic& /*packet*/)

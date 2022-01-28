@@ -8,8 +8,7 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-# We require CMake >= 3.2
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.11)
 
 # add this options before PROJECT keyword
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
@@ -77,7 +76,7 @@ find_package(PCHSupport)
 find_package(MySQL)
 
 if(NOT WITHOUT_GIT)
-  find_package(Git)
+  find_package(Git 1.7)
 endif()
 
 # Find revision ID and hash of the sourcetree
@@ -91,3 +90,12 @@ add_subdirectory(dep)
 
 # add core sources
 add_subdirectory(src)
+
+include(CTest)
+if(BUILD_TESTING)
+  list(APPEND CMAKE_MODULE_PATH
+    "${Catch2_SOURCE_DIR}/contrib")
+  include(Catch)
+
+  add_subdirectory(tests)
+endif()

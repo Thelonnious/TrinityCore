@@ -81,17 +81,18 @@ enum GroupMemberAssignment
     GROUP_ASSIGN_MAINASSIST = 1
 };
 
-enum GroupType
+enum GroupFlags
 {
-    GROUPTYPE_NORMAL         = 0x00,
-    GROUPTYPE_BG             = 0x01,
-    GROUPTYPE_RAID           = 0x02,
-    GROUPTYPE_BGRAID         = GROUPTYPE_BG | GROUPTYPE_RAID, // mask
-    GROUPTYPE_LFG_RESTRICTED = 0x04, // Script_HasLFGRestrictions()
-    GROUPTYPE_LFG            = 0x08,
-    // 0x10, leave/change group?, I saw this flag when leaving group and after leaving BG while in group
-    // GROUPTYPE_ONE_PERSON_PARTY   = 0x20, 4.x Script_IsOnePersonParty()
-    // GROUPTYPE_EVERYONE_ASSISTANT = 0x40  4.x Script_IsEveryoneAssistant()
+    GROUP_FLAG_NONE                 = 0x000,
+    GROUP_FLAG_FAKE_RAID            = 0x001,
+    GROUP_FLAG_RAID                 = 0x002,
+    GROUP_FLAG_LFG_RESTRICTED       = 0x004, // Script_HasLFGRestrictions()
+    GROUP_FLAG_LFG                  = 0x008,
+    GROUP_FLAG_DESTROYED            = 0x010,
+    GROUP_FLAG_ONE_PERSON_PARTY     = 0x020, // Script_IsOnePersonParty()
+    GROUP_FLAG_EVERYONE_ASSISTANT   = 0x040, // Script_IsEveryoneAssistant()
+
+    GROUP_MASK_BGRAID                = GROUP_FLAG_FAKE_RAID | GROUP_FLAG_RAID,
 };
 
 enum GroupUpdateFlags
@@ -105,7 +106,7 @@ enum GroupUpdateFlags
     GROUP_UPDATE_FLAG_MAX_POWER         = 0x00000020,       // int16 (power value)
     GROUP_UPDATE_FLAG_LEVEL             = 0x00000040,       // uint16 (level value)
     GROUP_UPDATE_FLAG_ZONE              = 0x00000080,       // uint16 (zone id)
-    GROUP_UPDATE_FLAG_UNK100            = 0x00000100,       // int16 (unk)
+    GROUP_UPDATE_FLAG_WMO_GROUP_ID      = 0x00000100,       // int16 (WMOGroupID)
     GROUP_UPDATE_FLAG_POSITION          = 0x00000200,       // uint16 (x), uint16 (y), uint16 (z)
     GROUP_UPDATE_FLAG_AURAS             = 0x00000400,       // uint8 (unk), uint64 (mask), uint32 (count), for each bit set: uint32 (spell id) + uint16 (AuraFlags)  (if has flags Scalable -> 3x int32 (bps))
     GROUP_UPDATE_FLAG_PET_GUID          = 0x00000800,       // uint64 (pet guid)
@@ -135,7 +136,7 @@ enum GroupUpdateFlags
                        GROUP_UPDATE_FLAG_PET_CUR_POWER | GROUP_UPDATE_FLAG_PET_MAX_POWER | GROUP_UPDATE_FLAG_PET_AURAS, // all pet flags
     GROUP_UPDATE_FULL = GROUP_UPDATE_FLAG_STATUS | GROUP_UPDATE_FLAG_CUR_HP | GROUP_UPDATE_FLAG_MAX_HP |
                         GROUP_UPDATE_FLAG_POWER_TYPE | GROUP_UPDATE_FLAG_CUR_POWER | GROUP_UPDATE_FLAG_MAX_POWER |
-                        GROUP_UPDATE_FLAG_LEVEL | GROUP_UPDATE_FLAG_ZONE | GROUP_UPDATE_FLAG_UNK100 |GROUP_UPDATE_FLAG_POSITION |
+                        GROUP_UPDATE_FLAG_LEVEL | GROUP_UPDATE_FLAG_ZONE | GROUP_UPDATE_FLAG_WMO_GROUP_ID |GROUP_UPDATE_FLAG_POSITION |
                         GROUP_UPDATE_FLAG_AURAS | GROUP_UPDATE_FLAG_PHASE | GROUP_UPDATE_FLAG_UNK400000 | GROUP_UPDATE_FLAG_UNK800000 |
                         GROUP_UPDATE_FLAG_UNK1000000 | GROUP_UPDATE_FLAG_UNK2000000 | GROUP_UPDATE_FLAG_UNK4000000 |
                         GROUP_UPDATE_FLAG_UNK8000000 | GROUP_UPDATE_FLAG_UNK10000000 | GROUP_UPDATE_FLAG_UNK20000000 | GROUP_UPDATE_FLAG_UNK40000000
@@ -152,7 +153,7 @@ class Roll : public LootValidatorRef
 
         ObjectGuid itemGUID;
         uint32 itemid;
-        int32  itemRandomPropId;
+        ItemRandomEnchantmentId itemRandomPropId;
         uint32 itemRandomSuffix;
         uint8 itemCount;
         typedef std::map<ObjectGuid, RollVote> PlayerVote;
@@ -243,6 +244,7 @@ class TC_GAME_API Group
         void   Disband(bool hideDestroy = false);
         void   SetLfgRoles(ObjectGuid guid, uint8 roles);
         uint8  GetLfgRoles(ObjectGuid guid);
+        void   SetEveryoneIsAssistant(bool apply);
 
         void   SetGroupMarkerMask(uint32 mask) { m_markerMask = mask; }
         void   AddGroupMarkerMask(uint32 mask) { m_markerMask |= mask; }
@@ -298,7 +300,7 @@ class TC_GAME_API Group
         GroupReference const* GetFirstMember() const { return m_memberMgr.getFirst(); }
         uint32 GetMembersCount() const { return m_memberSlots.size(); }
         uint32 GetInviteeCount() const { return m_invitees.size(); }
-        GroupType GetGroupType() const { return m_groupType; }
+        GroupFlags GetGroupFlags() const { return m_groupFlags; }
 
         uint8 GetMemberGroup(ObjectGuid guid) const;
 
@@ -331,6 +333,7 @@ class TC_GAME_API Group
         void SendRaidMarkerUpdateToPlayer(ObjectGuid playerGUID, bool remove = false);
         void SendUpdate();
         void SendUpdateToPlayer(ObjectGuid playerGUID, MemberSlot* slot = nullptr);
+        void SendUpdateDestroyGroupToPlayer(Player* player);
         void UpdatePlayerOutOfRange(Player* player);
 
         template<class Worker>
@@ -412,7 +415,7 @@ class TC_GAME_API Group
         InvitesList         m_invitees;
         ObjectGuid          m_leaderGuid;
         std::string         m_leaderName;
-        GroupType           m_groupType;
+        GroupFlags          m_groupFlags;
         uint32              m_markerMask;
         Difficulty          m_dungeonDifficulty;
         Difficulty          m_raidDifficulty;

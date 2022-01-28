@@ -39,14 +39,14 @@ namespace WorldPackets
             int32 AckIndex = 0;
         };
 
+        struct ShipTransferPending
+        {
+            uint32 ID = 0;              ///< gameobject_template.entry of the transport the player is teleporting on
+            int32 OriginMapID = -1;     ///< Map id the player is currently on (before teleport)
+        };
+
         class TransferPending final : public ServerPacket
         {
-            struct ShipTransferPending
-            {
-                uint32 ID = 0;              ///< gameobject_template.entry of the transport the player is teleporting on
-                int32 OriginMapID = -1;     ///< Map id the player is currently on (before teleport)
-            };
-
         public:
             TransferPending() : ServerPacket(SMSG_TRANSFER_PENDING, 12) { }
 
@@ -235,6 +235,28 @@ namespace WorldPackets
 
             ObjectGuid Guid;
             float SplineDist = 0.0f;
+        };
+
+        class TransferAborted final : public ServerPacket
+        {
+        public:
+            TransferAborted() : ServerPacket(SMSG_TRANSFER_ABORTED, 4 + 1 + 1) { }
+
+            WorldPacket const* Write() override;
+
+            uint32 MapID = 0;
+            uint8 TransfertAbort = 0;
+            uint8 Arg = 0;
+        };
+
+        class MoveSetActiveMover final : public ServerPacket
+        {
+        public:
+            MoveSetActiveMover(ObjectGuid moverGuid) : ServerPacket(SMSG_MOVE_SET_ACTIVE_MOVER, 8), MoverGUID(moverGuid) { }
+
+            WorldPacket const* Write() override;
+
+            ObjectGuid MoverGUID;
         };
     }
 

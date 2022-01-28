@@ -25,6 +25,7 @@
 #include "GridNotifiers.h"
 #include "Player.h"
 #include "SpellAuraEffects.h"
+#include "SpellHistory.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "TemporarySummon.h"
@@ -66,6 +67,7 @@ enum PriestSpells
     SPELL_PRIEST_GLYPH_OF_POWER_WORD_SHIELD_HEAL    = 56160,
     SPELL_PRIEST_GLYPH_OF_PRAYER_OF_HEALING_HEAL    = 56161,
     SPELL_PRIEST_GLYPH_OF_SHADOW                    = 107906,
+    SPELL_PRIEST_GLYPH_OF_SHADOW_WORD_DEATH         = 95652,
     SPELL_PRIEST_GUARDIAN_SPIRIT_HEAL               = 48153,
     SPELL_PRIEST_HOLY_WORD_CHASTISE                 = 88625,
     SPELL_PRIEST_HOLY_WORD_SANCTUARY                = 88686,
@@ -113,7 +115,8 @@ enum PriestSpellIcons
     PRIEST_ICON_ID_HARNESSED_SHADOWS                = 554,
     PRIEST_ICON_ID_IMPROVED_MIND_BLAST              = 95,
     PRIEST_ICON_ID_MIND_MELT                        = 3139,
-    PRIEST_ICON_ID_SHADOW_ORB                       = 4941
+    PRIEST_ICON_ID_SHADOW_ORB                       = 4941,
+    PRIEST_ICON_ID_GLYPH_OF_SHADOW_WORD_DEATH       = 1980
 };
 
 enum MiscSpells
@@ -276,14 +279,21 @@ class spell_pri_divine_aegis : public AuraScript
 
     bool CheckProc(ProcEventInfo& eventInfo)
     {
-        return eventInfo.GetProcTarget() != nullptr;
+        if (!eventInfo.GetProcTarget() || !eventInfo.GetSpellInfo())
+            return false;
+
+        // Prayer of Healing always triggers Divine Aegis
+        if (eventInfo.GetSpellInfo()->SpellFamilyFlags[0] & 0x200)
+            return true;
+
+        return (eventInfo.GetHitMask() & PROC_HIT_CRITICAL);
     }
 
     void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
     {
         PreventDefaultAction();
 
-        int32 absorb = CalculatePct(int32(eventInfo.GetHealInfo()->GetHeal()), aurEff->GetAmount());
+        int32 absorb = CalculatePct(int32(eventInfo.GetHealInfo()->GetEffectiveHeal()), aurEff->GetAmount());
 
         // Multiple effects stack, so let's try to find this aura.
         if (AuraEffect const* aegis = eventInfo.GetProcTarget()->GetAuraEffect(SPELL_PRIEST_DIVINE_AEGIS, EFFECT_0))
@@ -294,7 +304,8 @@ class spell_pri_divine_aegis : public AuraScript
 
         absorb = std::min(absorb, int32(CalculatePct(eventInfo.GetProcTarget()->GetMaxHealth(), 40)));
 
-        GetTarget()->CastSpell(eventInfo.GetProcTarget(), SPELL_PRIEST_DIVINE_AEGIS, CastSpellExtraArgs(aurEff).AddSpellBP0(SPELLVALUE_BASE_POINT0));
+        if (absorb)
+            GetTarget()->CastSpell(eventInfo.GetProcTarget(), SPELL_PRIEST_DIVINE_AEGIS, CastSpellExtraArgs(aurEff).AddSpellBP0(absorb));
     }
 
     void Register() override
@@ -555,8 +566,12 @@ class spell_pri_pain_and_suffering_proc : public SpellScript
             return;
 
         // Refresh Shadow Word: Pain duration on target
-        if (AuraEffect* aur = GetHitUnit()->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_PRIEST, 0x8000, 0, 0, caster->GetGUID()))
-            aur->GetBase()->RefreshDuration();
+        if (AuraEffect* aurEff = GetHitUnit()->GetAuraEffect(SPELL_AURA_PERIODIC_DAMAGE, SPELLFAMILY_PRIEST, 0x8000, 0, 0, caster->GetGUID()))
+        {
+            aurEff->RecalculateAmount(caster);
+            aurEff->CalculatePeriodic(caster, false, false);
+            aurEff->GetBase()->RefreshDuration();
+        }
     }
 
     void Register() override
@@ -639,7 +654,7 @@ class spell_pri_phantasm : public AuraScript
     void HandleEffectProc(AuraEffect const* /*aurEff*/, ProcEventInfo& /*eventInfo*/)
     {
         PreventDefaultAction();
-        GetTarget()->RemoveMovementImpairingAuras();
+        GetTarget()->RemoveMovementImpairingAuras(true);
     }
 
     void Register() override
@@ -806,7 +821,11 @@ class spell_pri_shadow_word_death : public SpellScript
 {
     bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        return ValidateSpellInfo({ SPELL_PRIEST_SHADOW_WORD_DEATH });
+        return ValidateSpellInfo(
+            {
+                SPELL_PRIEST_SHADOW_WORD_DEATH,
+                SPELL_PRIEST_GLYPH_OF_SHADOW_WORD_DEATH
+            });
     }
 
     void HandleDamageBonus(SpellEffIndex /*effIndex*/)
@@ -827,6 +846,8 @@ class spell_pri_shadow_word_death : public SpellScript
                 if (AuraEffect const* effect = target->GetDummyAuraEffect(SPELLFAMILY_PRIEST, PRIEST_ICON_ID_MIND_MELT, EFFECT_0))
                     AddPct(damage, effect->GetAmount());
             }
+
+            _launchHealthPct = target->GetHealthPct();
         }
 
         SetEffectValue(damage);
@@ -835,19 +856,42 @@ class spell_pri_shadow_word_death : public SpellScript
     void HandleSelfDamagingEffect(SpellEffIndex /*effIndex*/)
     {
         int32 damage = GetHitDamage();
+        Unit* caster = GetCaster();
 
         // Pain and Suffering reduces damage
-        if (AuraEffect* aurEff = GetCaster()->GetDummyAuraEffect(SPELLFAMILY_PRIEST, PRIEST_ICON_ID_PAIN_AND_SUFFERING, EFFECT_1))
+        if (AuraEffect* aurEff = caster->GetDummyAuraEffect(SPELLFAMILY_PRIEST, PRIEST_ICON_ID_PAIN_AND_SUFFERING, EFFECT_1))
             AddPct(damage, aurEff->GetAmount());
 
-        GetCaster()->CastSpell(GetCaster(), SPELL_PRIEST_SHADOW_WORD_DEATH, CastSpellExtraArgs(true).AddSpellBP0(damage));
+        caster->CastSpell(caster, SPELL_PRIEST_SHADOW_WORD_DEATH, CastSpellExtraArgs(true).AddSpellBP0(damage));
+    }
+
+    void HandleGlyphEffect()
+    {
+        Unit* target = GetHitUnit();
+        Unit* caster = GetCaster();
+
+        if (!target || !caster || caster == target)
+            return;
+
+        if (AuraEffect const* glyphEffect = caster->GetDummyAuraEffect(SPELLFAMILY_PRIEST, PRIEST_ICON_ID_GLYPH_OF_SHADOW_WORD_DEATH, EFFECT_0))
+        {
+            if (_launchHealthPct <= glyphEffect->GetAmount() && target->IsAlive() && !caster->HasAura(SPELL_PRIEST_GLYPH_OF_SHADOW_WORD_DEATH))
+            {
+                caster->GetSpellHistory()->ResetCooldown(GetSpellInfo()->Id, true);
+                caster->CastSpell(caster, SPELL_PRIEST_GLYPH_OF_SHADOW_WORD_DEATH, true); // Cooldown marker
+            }
+        }
     }
 
     void Register() override
     {
         OnEffectLaunchTarget.Register(&spell_pri_shadow_word_death::HandleDamageBonus, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
         OnEffectHitTarget.Register(&spell_pri_shadow_word_death::HandleSelfDamagingEffect, EFFECT_0, SPELL_EFFECT_SCHOOL_DAMAGE);
+        AfterHit.Register(&spell_pri_shadow_word_death::HandleGlyphEffect);
+
     }
+private:
+    float _launchHealthPct = 0.f;
 };
 
 // 15473 - Shadowform
